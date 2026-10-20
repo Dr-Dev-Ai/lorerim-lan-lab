@@ -16,7 +16,7 @@ Initial target: LoreRim 5.0.4.8 / Skyrim 1.6.1170 / portable MO2. Different Lore
    .\Setup-Lab.ps1
    ```
 
-   Enter your existing installation path and a **new, short destination**, such as `D:\LoreRim-LAN\LoreRim`. Allow at least 300 GB free for a typical installation, plus backup space. The script copies profiles/saves to a separate backup, physically copies the installation excluding top-level download/cache/log folders and profile saves, downloads the official runtime-specific STR release, verifies its pinned SHA256, and configures a new **LoreRim LAN Test** profile. It never disables an original mod. This is a lengthy disk copy.
+   Enter your existing installation path and a **new, short destination**, such as `D:\LoreRim-LAN\LoreRim`. Allow at least 300 GB free for a typical installation, plus backup space. The script copies profiles/saves to a separate backup, physically copies the installation excluding top-level download/cache/log folders and profile saves, downloads the official runtime-specific STR release, verifies its pinned SHA256, and configures a new **LoreRim LAN Test** profile. It never disables an original mod. It hides STR's two pet-suppression scripts and logo meshes so the installed pet behavior and LoreRim branding keep winning; pet multiplayer remains unverified. This is a lengthy disk copy.
 
 4. Read the generated `str-overrides.json`. It reports loose-file conflicts introduced by STR; archived script conflicts remain a separate audit task.
 5. Generate a full manifest on each PC before playing:

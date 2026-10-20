@@ -13,6 +13,8 @@ import lancheck
 
 MOD = 'LoreRim LAN - Skyrim Together 1.8.3 (1170)'
 PROFILE = 'LoreRim LAN Test'
+PRESERVE = {'scripts/petframework_petquest.pex', 'scripts/petframework_parentquestscript.pex',
+            'meshes/interface/logo/logo.nif', 'meshes/interface/logo/logo01ae.nif'}
 
 def configure(source, lab, package):
     source, lab, package = source.resolve(), lab.resolve(), package.resolve()
@@ -35,11 +37,16 @@ def configure(source, lab, package):
     shutil.copytree(lab / 'profiles' / original_profile, target, ignore=shutil.ignore_patterns('saves'))
     (target / 'saves').mkdir()
     shutil.copytree(package, lab / 'mods' / MOD)
-    # STR only adds logo meshes; its scripts deliberately override competing scripts.
-    # All conflicts are exported for review. No original mod is disabled.
+    # STR deliberately suppresses pet recruitment. Preserve the existing game's
+    # pet scripts and LoreRim logo instead; pet multiplayer remains unverified.
+    for f in lancheck.tree(lab / 'mods' / MOD):
+        if f.relative_to(lab / 'mods' / MOD).as_posix().casefold() in PRESERVE:
+            f.rename(f.with_name(f.name + '.mohidden'))
     enabled, effective, providers = lancheck.resolve(lab, original_profile)
     conflicts = []
     for f in lancheck.tree(package):
+        if f.relative_to(package).as_posix().casefold() in PRESERVE:
+            continue
         key = 'data/' + f.relative_to(package).as_posix().casefold()
         if key in effective:
             conflicts.append({'file': key, 'previous_provider': providers[key],
@@ -92,7 +99,8 @@ def configure(source, lab, package):
     (server / 'Data').mkdir()
     (server / 'Data/loadorder.txt').write_text('\n'.join(lancheck.active_plugins(lab, PROFILE)) + '\n', encoding='utf-8')
     return {'lab': str(lab), 'profile': PROFILE, 'server': str(server), 'script_conflicts': conflicts,
-            'status': 'PREPARED, NOT GAMEPLAY VERIFIED', 'changes': changes}
+            'status': 'PREPARED, NOT GAMEPLAY VERIFIED', 'changes': changes,
+            'upstream_overrides_not_deployed': sorted(PRESERVE), 'pet_sync': 'UNVERIFIED'}
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
