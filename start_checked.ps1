@@ -4,6 +4,9 @@ param(
     [switch]$HostServer
 )
 $ErrorActionPreference = 'Stop'
+if (Get-Process ModOrganizer -ErrorAction SilentlyContinue) {
+    throw 'Close other idle Mod Organizer windows first; MO2 can retain a cross-instance launch lock.'
+}
 $root = (Resolve-Path -LiteralPath $Lab).Path
 if (-not (Test-Path -LiteralPath (Join-Path $root 'LORERIM_LAB.json'))) { throw 'Not a marked isolated lab.' }
 $server = Join-Path (Split-Path $root) 'server'
@@ -18,4 +21,4 @@ if ($HostServer) {
     Start-Process -FilePath (Join-Path $server 'SkyrimTogetherServer.exe') -WorkingDirectory $server -WindowStyle Hidden
 }
 # The MO2 interface is visible for the user to select/run the isolated game.
-Start-Process -FilePath (Join-Path $root 'ModOrganizer.exe') -WorkingDirectory $root -ArgumentList '--multiple'
+Start-Process -FilePath (Join-Path $root 'ModOrganizer.exe') -WorkingDirectory $root
