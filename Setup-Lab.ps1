@@ -4,6 +4,11 @@ if (-not $Source) { $Source = Read-Host 'Folder containing your LoreRim ModOrgan
 if (-not $Destination) { $Destination = Read-Host 'NEW lab folder, preferably a short path such as D:\LoreRim-LAN\LoreRim' }
 $Source = (Resolve-Path -LiteralPath $Source).Path
 $Destination = [IO.Path]::GetFullPath($Destination)
+if ($Destination.TrimEnd('\').Equals($Source.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase) -or
+    $Destination.StartsWith($Source.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) -or
+    $Source.StartsWith($Destination.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Source and lab must be separate, non-overlapping trees.'
+}
 if ((Get-Item -LiteralPath (Join-Path $Source 'Stock Game\SkyrimSE.exe')).VersionInfo.FileVersion -ne '1.6.1170.0') {
     throw 'This experimental setup is pinned to Skyrim 1.6.1170.0. Do not upgrade/downgrade the modpack blindly.'
 }

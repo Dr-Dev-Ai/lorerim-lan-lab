@@ -19,7 +19,7 @@ def configure(source, lab, package):
     if lab == source or source in lab.parents or lab in source.parents:
         raise ValueError('Source and lab must be separate trees')
     marker = lab / 'LORERIM_LAB.json'
-    if not marker.exists() or Path(json.loads(marker.read_text())['source']).resolve() != source:
+    if not marker.exists() or Path(json.loads(marker.read_text(encoding='utf-8-sig'))['source']).resolve() != source:
         raise ValueError('Missing matching clone marker; use clone_lab.ps1 first')
     if (lab / 'profiles' / PROFILE).exists():
         raise ValueError('Lab profile already exists; refusing to overwrite')
