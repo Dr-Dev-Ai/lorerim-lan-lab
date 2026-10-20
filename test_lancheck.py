@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import lancheck as lc
+import loader_fix
 
 
 class PreflightTests(unittest.TestCase):
@@ -45,6 +46,19 @@ class PreflightTests(unittest.TestCase):
         a = lc.audit(self.root, 'Test')
         with self.assertRaises(ValueError):
             lc.compare(a, a)
+
+    def test_dependency_staging_preserves_bytes_and_refuses_collision(self):
+        self.put('LORERIM_LAB.json', '{}')
+        self.put('mods/High/SkyrimTogetherReborn/SkyrimTogether.exe', 'launcher')
+        self.put('mods/Low/KiLoader/Dependencies/KiHalloc.dll', 'installed-dependency')
+        result = loader_fix.stage(self.root, 'Test', 'High')
+        target = self.root / 'mods/High/SkyrimTogetherReborn/KiHalloc.dll'
+        self.assertEqual(target.read_text(), 'installed-dependency')
+        self.assertEqual(len(result), 1)
+        target.write_text('different-library')
+        with self.assertRaises(ValueError):
+            loader_fix.stage(self.root, 'Test', 'High')
+        self.assertEqual(target.read_text(), 'different-library')
 
     def test_identical_content_portable_roots(self):
         a = lc.audit(self.root, 'Test', True)

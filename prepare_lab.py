@@ -10,6 +10,7 @@ import re
 import shutil
 import sys
 import lancheck
+import loader_fix
 
 MOD = 'LoreRim LAN - Skyrim Together 1.8.3 (1170)'
 PROFILE = 'LoreRim LAN Test'
@@ -75,6 +76,7 @@ def configure(source, lab, package):
     executable = (lab / 'mods' / MOD / 'SkyrimTogetherReborn' / 'SkyrimTogether.exe').as_posix()
     text += f'\n[customExecutables]\nsize=1\n1\\title=LoreRim LAN Test\n1\\binary={executable}\n1\\arguments=\n1\\workingDirectory={(lab / "Stock Game").as_posix()}\n1\\hide=false\n1\\ownicon=false\n1\\toolbar=false\n'
     (lab / 'ModOrganizer.ini').write_text(text, encoding='utf-8')
+    loader_fix.stage(lab, PROFILE, MOD)
     (lab / 'downloads').mkdir(exist_ok=True)
     # Separate server working directory; server does not need redistributed plugins.
     server = lab.parent / 'server'
