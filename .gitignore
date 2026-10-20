@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.json
+*.csv
+*.log
+*.zip
+*.exe
+*.dll
+*.ess
+*.skse
+work/
+mods/
+profiles/
+Stock Game/
