@@ -59,6 +59,64 @@ class GuidedInstallerTests(unittest.TestCase):
         self.assertEqual(len(list((lab/'installer-recovery').rglob('evidence.txt'))),3)
         self.assertFalse((self.base/'server').exists())
 
+    def test_assets_are_linked_but_fix_targets_settings_and_generated_files_are_private(self):
+        source=self.base/'source';lab=self.base/'lab'
+        assets=['mods/Art/textures/large.dds','mods/Art/main.bsa','Stock Game/Data/Skyrim.bsa']
+        private=['mods/Native/SKSE/Plugins/plugin.dll','mods/Native/SKSE/Plugins/plugin.ini',
+                 'mods/Scripts/example.pex','mods/Records/example.esp','ModOrganizer.ini',
+                 'overwrite/generated.dds','Stock Game/screenshot.png','mods/Art/Root/palette.dds']
+        for name in assets+private:
+            p=source/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'original')
+        result=w.link_lab(source,lab,self.base/'links.json')
+        self.assertEqual(result['shared_files'],len(assets))
+        self.assertEqual(result['private_files'],len(private))
+        for name in assets:self.assertTrue(os.path.samefile(source/name,lab/name),name)
+        for name in private:
+            self.assertFalse(os.path.samefile(source/name,lab/name),name)
+            (lab/name).write_bytes(b'changed independently')
+            self.assertEqual((source/name).read_bytes(),b'original')
+        w.link_lab(source,lab,self.base/'links.json')
+        for name in assets:self.assertEqual((source/name).stat().st_nlink,2)
+
+    def test_old_partial_physical_copy_becomes_link_without_changing_source(self):
+        source=self.base/'source';lab=self.base/'lab'
+        asset=Path('mods/Art/archive.bsa');(source/asset).parent.mkdir(parents=True)
+        (source/asset).write_bytes(b'complete source asset')
+        (lab/asset).parent.mkdir(parents=True);(lab/asset).write_bytes(b'partial copy')
+        w.link_lab(source,lab,self.base/'links.json')
+        self.assertTrue(os.path.samefile(source/asset,lab/asset))
+        self.assertEqual((source/asset).read_bytes(),b'complete source asset')
+
+    def test_space_estimate_ignores_large_shared_asset_bytes(self):
+        source=self.base/'source';(source/'mods/Art').mkdir(parents=True)
+        with (source/'mods/Art/huge.bsa').open('wb') as f:f.truncate(128*1024*1024)
+        (source/'ModOrganizer.ini').write_bytes(b'small settings')
+        self.assertLess(w.private_size(source),1024*1024)
+
+    def test_unsupported_hard_links_do_not_fall_back_to_bulk_copy(self):
+        source=self.base/'source';lab=self.base/'lab'
+        asset=source/'mods/Art/a.dds';asset.parent.mkdir(parents=True);asset.write_bytes(b'asset')
+        with patch.object(w.os,'link',side_effect=OSError('not supported')),patch.object(w.shutil,'copy2') as copying:
+            with self.assertRaisesRegex(ValueError,'same local drive'):w.link_lab(source,lab,self.base/'links.json')
+            copying.assert_not_called()
+        self.assertEqual(asset.read_bytes(),b'asset')
+
+    def test_same_volume_requirement_prevents_cross_drive_copy(self):
+        source=self.base/'source';source.mkdir();lab=self.base/'lab'
+        with patch.object(w,'same_volume',side_effect=ValueError('SAME drive')),patch.object(w.shutil,'copy2') as copying:
+            with self.assertRaisesRegex(ValueError,'SAME drive'):w.link_lab(source,lab,self.base/'links.json')
+            copying.assert_not_called()
+        self.assertFalse(lab.exists())
+
+    def test_unexpected_destination_hard_link_is_not_overwritten(self):
+        source=self.base/'source';lab=self.base/'lab'
+        asset=source/'mods/Art/a.dds';asset.parent.mkdir(parents=True);asset.write_bytes(b'expected')
+        unrelated=self.base/'other.dds';unrelated.write_bytes(b'unrelated')
+        target=lab/'mods/Art/a.dds';target.parent.mkdir(parents=True);os.link(unrelated,target)
+        with self.assertRaisesRegex(ValueError,'Unexpected shared destination'):
+            w.link_lab(source,lab,self.base/'links.json')
+        self.assertEqual(unrelated.read_bytes(),b'unrelated')
+
     def test_overlapping_install_paths_are_rejected(self):
         with self.assertRaises(ValueError):w.separate(self.base,self.base/'child')
         with self.assertRaises(ValueError):w.separate(self.base,self.base)
@@ -67,9 +125,9 @@ class GuidedInstallerTests(unittest.TestCase):
         source=self.base/'source';source.mkdir();lab=self.base/'install/lab'
         statefile=lab.parent/'state.json'
         with patch.object(w,'preflight',return_value=(source,lab,statefile,None,'Ultra',3490)), \
-             patch.object(w,'source_size',return_value=1), \
+             patch.object(w,'private_size',return_value=1), \
              patch.object(w,'download',side_effect=OSError('offline')), \
-             patch.object(w,'copy_lab') as copy:
+             patch.object(w,'link_lab') as copy:
             with self.assertRaisesRegex(OSError,'offline'):w.run(source,lab,'10.0.0.250')
             copy.assert_not_called()
         self.assertFalse(lab.exists())

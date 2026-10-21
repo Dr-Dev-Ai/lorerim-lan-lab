@@ -1,0 +1,2 @@
+v0.3.0 fast installer ZIP SHA256: 60f21f4932f652858c436157129b1b4537447f6704067719066913ebd3d342c3
+54 packaged file hashes verified. Large assets linked; program/script/settings files private.

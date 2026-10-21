@@ -9,6 +9,9 @@ using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
+[assembly: AssemblyVersion("0.3.0.0")]
+[assembly: AssemblyFileVersion("0.3.0.0")]
+
 class Installer : Form {
     readonly string root = AppDomain.CurrentDomain.BaseDirectory;
     TextBox source = new TextBox(), destination = new TextBox(), host = new TextBox();
@@ -50,20 +53,20 @@ class Installer : Form {
         }
     }
     Installer() {
-        Text="LoreRim Together Setup";
+        Text="LoreRim Together Setup (Fast)";
         ClientSize=new Size(760,615); FormBorderStyle=FormBorderStyle.FixedDialog;
         MaximizeBox=false; StartPosition=FormStartPosition.CenterScreen;
         Font=new Font("Segoe UI",11); BackColor=Color.FromArgb(247,248,250);
         AddLabel("Play LoreRim together",28,22,700,40,21,true);
-        AddLabel("Choose your existing LoreRim folder. We'll take care of the rest.",30,72,700,30,11,false);
+        AddLabel("Fast setup: reuse your installed LoreRim files. We'll handle the fixes.",30,72,700,30,11,false);
         AddLabel("1   Where is LoreRim installed?",30,122,690,28,12,true);
         AddLabel("Choose the folder containing ModOrganizer.exe.",30,153,690,25,10,false);
         Place(source,30,183,585,30); Browse(sourceBrowse,"Browse…",source,625,182);
         source.TextChanged += delegate { if (!busy && source.Text.Length>2) {
             try { destination.Text=Path.Combine(Path.GetPathRoot(source.Text),"LoreRim-LAN","LoreRim"); } catch {} }
         };
-        AddLabel("2   Where should the multiplayer copy go?",30,229,690,28,12,true);
-        AddLabel("Choose a drive with room for another LoreRim copy. Your original stays separate.",30,260,700,25,10,false);
+        AddLabel("2   Multiplayer setup folder",30,229,690,28,12,true);
+        AddLabel("Keep this on the same drive as LoreRim. Large game files are reused, not copied.",30,260,700,25,10,false);
         Place(destination,30,290,585,30); Browse(destinationBrowse,"Browse…",destination,625,289);
         AddLabel("3   Host computer address",30,337,300,28,12,true);
         Place(host,345,336,270,30); host.Text="10.0.0.250";
@@ -78,7 +81,7 @@ class Installer : Form {
         Place(logButton,30,550,160,38);logButton.Text="Open setup log";logButton.Visible=false;
         logButton.Click+=delegate { if(File.Exists(logPath)) Process.Start("notepad.exe",Quote(logPath)); };
         FormClosing+=delegate(object sender,FormClosingEventArgs e) { if(busy) {
-            MessageBox.Show(this,"Installation is still running. Please leave this window open so the copy and checks can finish.","Still installing");e.Cancel=true; }
+            MessageBox.Show(this,"Installation is still running. Please leave this window open so setup and checks can finish.","Still installing");e.Cancel=true; }
         };
         Shown+=async delegate { await DetectSource(); };
     }
@@ -89,7 +92,7 @@ class Installer : Form {
     void Browse(Button b,string title,TextBox field,int x,int y) {
         Place(b,x,y,100,32);b.Text=title;b.Click+=delegate {
             using(FolderBrowserDialog dialog=new FolderBrowserDialog()) {
-                dialog.Description=field==source?"Select your existing LoreRim folder (contains ModOrganizer.exe)":"Select a location for the separate multiplayer copy";
+                dialog.Description=field==source?"Select your existing LoreRim folder (contains ModOrganizer.exe)":"Choose a location on the same drive as LoreRim";
                 dialog.ShowNewFolderButton=field!=source;
                 if(Directory.Exists(field.Text))dialog.SelectedPath=field.Text;
                 if(dialog.ShowDialog(this)==DialogResult.OK)field.Text=field==source?dialog.SelectedPath:Path.Combine(dialog.SelectedPath,"LoreRim-LAN","LoreRim");

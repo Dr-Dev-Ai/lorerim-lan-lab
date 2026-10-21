@@ -1,0 +1,18 @@
+{"message": "Reusing game assets: 0 linked. Setting up 1 private files\u2026", "progress": 28}
+{"message": "Reusing game assets: 0 linked. Setting up 1 private files\u2026", "progress": 28}
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Applying all compatibility fixes\u2026", "progress": 78}
+{"message": "Verifying the finished installation\u2026", "progress": 94}
+{"message": "Installed! Use the Play LoreRim Together desktop shortcut. Press F2 in-game and connect to 10.0.0.250:10578. Password: LoreRimLab", "progress": 100}
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Checking space for settings and compatibility files\u2026", "progress": 6}
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Applying all compatibility fixes\u2026", "progress": 78}
+{"message": "Reusing game assets: 1 linked. Setting up 0 private files\u2026", "progress": 28}
+{"message": "Downloading Test\u2026", "progress": 12}
+{"message": "Downloading Test: 0 MB", "progress": 12}
+....................................................
+----------------------------------------------------------------------
+Ran 52 tests in 0.630s
+
+OK

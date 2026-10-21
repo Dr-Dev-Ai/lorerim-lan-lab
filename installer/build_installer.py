@@ -44,17 +44,23 @@ def build(folder,adapter):
 
 No commands or Python installation are needed.
 Use the matching LoreRim 5.0.4.8 / Skyrim 1.6.1170 installation.
-Close Skyrim and Mod Organizer first. Keep the window open while it copies.
+Close Skyrim and Mod Organizer first. Keep the window open during setup.
 Setup downloads the required Skyrim Together and JContainers releases,
 checks them, applies all fixes, and creates a Play LoreRim Together shortcut.
-It needs space for a separate LoreRim copy; your original remains separate.
+Large game assets are reused through hard links, not copied again.
+Choose a setup folder on the SAME drive as your installed LoreRim.
+Programs, scripts, plugin records and settings get their own files.
+Setup checks the smaller amount of free space it needs before starting.
+The two setups share assets: mod updates or asset edits can affect both.
 
 To play: open the new desktop shortcut. Load your own character, wait for mods
 to initialize, then press F2. Use the host address shown by setup and password
 LoreRimLab. The host must keep the server running.
 
 If setup fails, use Open setup log and send that log back for help.
-The installer can resume its copy and reapply its fixes after an interruption.
+The installer can resume setup and reapply its fixes after an interruption.
+An unfinished old copy on the same drive can be converted automatically.
+Stop the old installer and its copy process before starting this version.
 This is a portable installer: keep all extracted files together until it finishes.
 
 Includes our MIT-licensed tooling/adapter and the official Python runtime

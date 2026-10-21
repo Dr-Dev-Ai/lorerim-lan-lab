@@ -2,18 +2,21 @@
 
 You already need the same LoreRim 5.0.4.8 installation as the host.
 
-1. [Download the installer ZIP](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.2.0-experimental/LoreRim-Together-Installer.zip).
+1. [Download the installer ZIP](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.3.0-experimental/LoreRim-Together-Installer.zip).
 2. Right-click it and choose **Extract All**. Open the extracted folder.
 3. Double-click **Install LoreRim Together.exe**.
 4. The installer should find LoreRim. If it does not, click **Browse** and select
    the folder containing **ModOrganizer.exe**.
-5. Choose a drive with room for a separate LoreRim copy and click **Install**.
-   Close Skyrim and Mod Organizer first. Leave the installer open while it copies.
+5. Keep the setup folder on the **same drive** as LoreRim and click **Install**.
+   Close Skyrim and Mod Organizer first. Leave the installer open during setup.
 6. When it says **Ready to play**, use the new **Play LoreRim Together** desktop shortcut.
 
 That is the complete installation. Setup handles the downloads, runtime and
 all compatibility fixes. No commands or separate Python installation are needed.
-Your original LoreRim stays separate. The copy can take a long time.
+Large textures, meshes, audio and archives are reused instead of copied.
+Programs, scripts, plugin records and settings have their own files.
+The installer still needs time to scan files and create links.
+Because large assets are shared, mod updates or asset edits can affect both setups.
 
 ## Join the game
 
@@ -30,9 +33,11 @@ If the host's LAN address changes, enter its new address instead.
 
 ## If something goes wrong
 
-Click **Open setup log** and send the log back for help. If a download or copy
-was interrupted, click **Try again**. Do not delete the partial installation;
-the installer can resume it. If the destination is too full, choose another drive.
+Click **Open setup log** and send the log back for help. If a download or setup
+was interrupted, click **Try again**. An unfinished old copy can be converted
+automatically if its destination is on the same drive as LoreRim. Stop the old
+installer and its copy process before starting this version. Keep the selected
+setup folder on the same drive; the installer checks the required free space.
 
 The initial host test successfully loaded a character and connected with all
 3,492 plugins. Two-computer combat and quest synchronization still need testing.

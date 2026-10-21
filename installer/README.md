@@ -1,73 +1,91 @@
-# Guided Windows installer
+# Fast guided installer (0.3)
 
-Download `LoreRim-Together-Installer.zip` from the
-[v0.2.0 experimental release](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/tag/v0.2.0-experimental).
-Extract the complete ZIP, then double-click **Install LoreRim Together.exe**.
-There are no terminal commands or separate Python installation steps.
+[Download the installer ZIP](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.3.0-experimental/LoreRim-Together-Installer.zip).
+Extract it and open **Install LoreRim Together.exe**. The window title includes
+**(Fast)** so you can distinguish it from the earlier full-copy installer.
 
-The wizard detects common LoreRim folders, lets the player choose another folder
-or destination drive, and checks the runtime, source plugin ordering, native
-plugin hashes, closed applications and available disk space. It downloads pinned
-official STR 1.8.3 and JContainers 4.2.13.1 archives, physically copies the
-existing installation without its download cache or old saves, prepares the LAN
-profile, stages KiLoader dependencies, applies all six fixes, verifies the
-result and creates desktop play/help shortcuts. The original stays separate.
+Choose your existing matching LoreRim folder and keep the multiplayer setup
+folder on the **same drive**. Setup reuses large textures, meshes, animations,
+audio and archives through hard links. It does not duplicate those asset bytes.
+Programs, scripts, plugin records, settings, metadata, caches and generated
+output remain private physical files. Known writable locations such as overwrite,
+Root overlays, tools and screenshot/cache folders are excluded from asset sharing.
 
-The ZIP includes the official Python 3.12.10 embeddable runtime and license,
-our tested BSA adapter and MinHook license. It does not include game assets or
-original mod DLLs. Python is private to this folder: no administrator access,
-PATH changes, terminal commands, PowerShell policy changes or pip are required.
-The native frontend uses Windows' .NET Framework and creates shortcuts through
-the Windows scripting COM API, without running PowerShell scripts.
+The source and lab must be separate folders. Shared assets require a local
+filesystem that supports hard links on the same volume. Unsupported destinations
+fail with an explanation; the installer never silently falls back to copying the
+whole game. The space check counts private file bytes, link metadata and 3 GiB
+for downloads, staging and backups. It still scans all source filenames and
+creates directory entries, so it is not instant.
 
-The setup window remains responsive while work runs in a hidden child process.
-Interrupted copies resume. Configuration retries retain partial output in the
-owned lab's `installer-recovery` folder; fix retries are hash-checked and
-idempotent. Existing unrelated destination folders are rejected. Closing the
-window during an active install is blocked so the copy is not accidentally
-abandoned. Downloads interrupted by loss of connection are reattempted on retry.
-They are not resumed partway through an archive.
+## Existing installations
 
-Failures leave a readable status and **Open setup log** button. Logs are stored
-under `%LOCALAPPDATA%/LoreRimLAN/Logs`. The large copy also has
-`LoreRim-copy.log` beside the lab. These logs are local; no telemetry is uploaded.
+An interrupted 0.2 full copy on the same drive is recognized using its existing
+state/marker files. Already copied asset entries are replaced atomically by
+links to the source assets; private files are copied independently. This can
+reclaim already duplicated asset storage. Completed 0.2 physical copies are
+reused as-is; this version does not rewrite completed installations simply to
+change their storage layout. Cross-drive partial copies require a new destination
+on the source drive. Nothing deletes the old cross-drive copy automatically.
+
+Stop the old installer and its copy process before starting the new one. The
+preflight refuses to proceed while robocopy is running. A new setup can be
+retried after an interruption. Configuration recovery retains partial output,
+and all six fixes remain hash-checked and idempotent.
+
+## Shared-asset tradeoff
+
+The installer does not patch any original source bytes. Its fixes operate on
+private DLLs, scripts and settings. Hard-linked assets reference the same disk
+bytes: editing an asset through either path affects both. Keep both setups on
+the same modpack version, and do not update mods or run asset-generation tools
+through the LAN workspace. The lab's MO2 exposes only the multiplayer launcher.
+This is not an independent backup of the source assets.
+
+## Included and downloaded components
+
+The portable ZIP includes the licensed official Python runtime and our tested
+BSA adapter. It downloads pinned official STR 1.8.3 and JContainers 4.2.13.1
+archives, configures the isolated profile, stages dependencies, applies every
+fix and creates play/help shortcuts. No Python installation, pip, administrator
+access, terminal commands or PowerShell policy changes are needed.
+
+No game or original mod binaries are bundled. Requires the same installed
+LoreRim 5.0.4.8 / Skyrim 1.6.1170 as the host. Desktop shortcuts are created
+through the Windows COM API. Logs remain local under
+`%LOCALAPPDATA%/LoreRimLAN/Logs`, with `LoreRim-link-report.json` beside the lab.
 
 ## Validation
 
-- All 46 Python tests pass, including archive traversal/corruption rejection,
-  original-save exclusion, physical copy retry, recovery retention, failure
-  gates and all-fixes-before-shortcuts ordering.
-- The packaged runtime passed read-only preflight against the host's original
-  LoreRim 5.0.4.8 / Skyrim 1.6.1170 installation (3,490 original plugins).
-- Both automatic downloads passed their pinned SHA256 checks using the packaged
-  runtime, without an installed Python or pip dependency.
-- A small independent fixture completed the real copy, STR configuration,
-  all six actual fixes, verification and native shortcut creation twice. Original
-  fixture native files retained their hashes. This fixture used synthetic plugin
-  data, a private fixture baseline and a relaxed test-only path limit; it did
-  not launch a game or touch live game files.
-- The Windows wizard was visually checked. Desktop shortcut creation was tested
-  in an isolated temporary desktop folder.
+All 52 automated tests pass. New tests verify asset file identity, independent
+DLL/script/settings writes, conversion of a partially copied asset, exclusion
+of large shared bytes from the space estimate, rejection of unsupported links
+without fallback, and refusal to overwrite an unrelated shared destination file.
 
-A full-size installation on the second computer and two-client gameplay remain
-to be tested. The earlier host lab did load a character and connect locally with
-all 3,492 plugins and server ModPolicy enabled.
+A small isolated integration fixture resumed an interrupted 0.2 copy, linked
+128 MiB of synthetic assets, applied all six actual fixes to private files,
+verified unchanged original DLL bytes, created native shortcuts and completed
+an idempotent retry. Only about 40 MiB of fixture programs/scripts/settings was
+copied. The fixture used a private plugin baseline and relaxed test-only path
+limit; it did not launch a game or modify live installs.
+
+The host's earlier physical lab loaded a character and connected locally with
+3,492 mods. Full-size linked-asset setup on the second computer and two-client
+gameplay still need validation. Creating links is not a gameplay certification.
 
 ## Build
 
-With the tested locally built adapter available, on Windows:
+On Windows with the tested adapter:
 
 ```powershell
 python installer/build_installer.py --output build-release --adapter path/to/BSAMemoryMap.dll
 ```
 
-The output folder must be new. The builder uses the Windows .NET Framework C#
-compiler, downloads the official Python embed archive, verifies its pinned hash,
-retains license notices and generates a checked ZIP plus SHA256 file. The Python
-archive digest also matches the message digest in Python.org's published
-Sigstore bundle. No claim of independent certificate verification is made.
+The output folder must be new. The builder compiles the Windows frontend,
+verifies the pinned Python embed archive, retains Python/MinHook license notices,
+and writes a verified ZIP, per-file manifest and SHA256 checksum.
 
-Download sources:
-[Python embed](https://www.python.org/downloads/release/python-31210/),
-[STR 1.8.3](https://github.com/tiltedphoques/TiltedEvolution/releases/tag/v1.8.3),
-[JContainers 4.2.13.1](https://github.com/ryobg/JContainers/releases/tag/v4.2.13.1).
+References: [Windows hard links](https://learn.microsoft.com/en-us/windows/win32/fileio/hard-links-and-junctions),
+[Python](https://www.python.org/downloads/release/python-31210/),
+[STR](https://github.com/tiltedphoques/TiltedEvolution/releases/tag/v1.8.3),
+[JContainers](https://github.com/ryobg/JContainers/releases/tag/v4.2.13.1).

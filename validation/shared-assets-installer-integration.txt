@@ -1,0 +1,13 @@
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Reusing existing game assets and creating private settings\u2026", "progress": 28}
+{"message": "Reusing game assets: 0 linked. Setting up 1 private files\u2026", "progress": 28}
+{"message": "Setting up the multiplayer profile\u2026", "progress": 65}
+{"message": "Applying all compatibility fixes\u2026", "progress": 78}
+{"message": "Verifying the finished installation\u2026", "progress": 94}
+{"message": "Installed! Use the Play LoreRim Together desktop shortcut. Press F2 in-game and connect to 10.0.0.250:10578. Password: LoreRimLab", "progress": 100}
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Applying all compatibility fixes\u2026", "progress": 78}
+{"message": "Verifying the finished installation\u2026", "progress": 94}
+{"message": "Installed! Use the Play LoreRim Together desktop shortcut. Press F2 in-game and connect to 10.0.0.250:10578. Password: LoreRimLab", "progress": 100}
+Storage report: {'shared_files': 2, 'private_files': 55, 'shared_asset_bytes': 134239232, 'copied_bytes': 41906466}
+PASS: resumed an interrupted old full-copy install, shared all fixture assets without duplicating their bytes, applied all six actual fixes to private files, verified source DLL bytes unchanged, created shortcuts, and retried successfully. Game not launched.

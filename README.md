@@ -2,7 +2,7 @@
 
 ## Download the all-in-one installer
 
-### [Download LoreRim Together Installer for Windows](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.2.0-experimental/LoreRim-Together-Installer.zip)
+### [Download LoreRim Together Installer for Windows](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.3.0-experimental/LoreRim-Together-Installer.zip)
 
 Download the ZIP above, choose **Extract All**, then open
 **Install LoreRim Together.exe** and click **Install** after choosing your
@@ -12,26 +12,29 @@ then creates a **Play LoreRim Together** desktop shortcut.
 **Use this installer download, not the green Code → Download ZIP button.**
 That button downloads developer source files. No Python installation or commands
 are needed for the installer. It requires your existing matching LoreRim
-5.0.4.8 installation and room for a separate copy.
+5.0.4.8 installation. Keep the setup folder on the same drive as LoreRim.
+Large game assets are reused through links; only programs, scripts, plugin
+records and settings are copied.
 
-[Release page and download assets](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/tag/v0.2.0-experimental)
+[Release page and download assets](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/tag/v0.3.0-experimental)
 · [Simple installation guide](SECOND-PC.md)
 
 **Experimental setup and verification tooling. Not a certified LoreRim multiplayer patch.**
 
-This project preserves an existing LoreRim installation in a separate physical copy, adds the official Skyrim Together Reborn **1.8.3 build for Skyrim 1.6.1170**, and provides strict file-parity checks and a two-client acceptance procedure. It does not claim that connecting means Requiem, combat, quests or scripted systems synchronize correctly.
+The fast installer creates a multiplayer workspace that shares large static game assets through hard links while keeping programs, scripts, plugin records and settings in private files. It adds the official Skyrim Together Reborn **1.8.3 build for Skyrim 1.6.1170**, and provides strict file-parity checks and a two-client acceptance procedure. It does not claim that connecting means Requiem, combat, quests or scripted systems synchronize correctly.
 
 Initial target: LoreRim 5.0.4.8 / Skyrim 1.6.1170 / portable MO2. Different LoreRim versions need their own assessment. Each PC needs its own licensed game and installed modpack. No game files, mod assets or saves are distributed here.
 
 ## Install on the second computer
 
-1. [Download the guided installer ZIP](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.2.0-experimental/LoreRim-Together-Installer.zip).
+1. [Download the guided installer ZIP](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.3.0-experimental/LoreRim-Together-Installer.zip).
 2. Extract it, then double-click **Install LoreRim Together.exe**.
 3. Choose the existing LoreRim folder and click **Install**. Setup handles the
    downloads and all compatibility fixes, then creates a desktop play shortcut.
 
 No Python installation or typed commands are needed. Both PCs need matching
-LoreRim 5.0.4.8 / Skyrim 1.6.1170. Leave room for a separate physical LoreRim copy.
+LoreRim 5.0.4.8 / Skyrim 1.6.1170. Choose a setup folder on the same drive as LoreRim. The installer checks
+the smaller amount of space needed for private files and downloads.
 See [SECOND-PC.md](SECOND-PC.md) for joining, or [installer/README.md](installer/README.md)
 for installer behavior, validation and building from source. The GitHub **Code →
 Download ZIP** option contains source, not the ready-to-use installer.
@@ -67,7 +70,7 @@ Measure basic network RTT with `measure_lan.ps1 -Peer <peer-IP> -Output lan-rtt.
 
 ## Rollback
 
-Exit the lab game, lab MO2 and server, then reopen your original MO2/profile. Original files are independent; do not copy lab saves back. Retain wanted test evidence before deleting the lab to recover disk space. No automated recursive deletion is included.
+Exit the lab game, lab MO2 and server, then reopen your original MO2/profile. Programs, scripts and settings are independent; large assets are shared by the fast installer. Do not edit assets or update/regenerate mods through the LAN workspace. Do not copy lab saves back. Retain wanted test evidence before deleting the lab to recover disk space. No automated recursive deletion is included.
 
 ## Upstream and licensing
 

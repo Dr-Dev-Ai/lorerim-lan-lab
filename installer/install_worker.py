@@ -9,9 +9,11 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import time
 import traceback
+import uuid
 import urllib.request
 import zipfile
 import camera_fix, bsa_guard_fix, blink_fix, alttab_fix, transport_fix
@@ -22,6 +24,11 @@ STR_URL = 'https://github.com/tiltedphoques/TiltedEvolution/releases/download/v1
 STR_HASH = '0b2f7edcaed6152541092a1fda759de2f407985523d69a87c9cddf0ebf9b5996'
 EXCLUDED = {'downloads','cache','webcache','logs','crashdumps','__temp__'}
 MAX_DESTINATION_LENGTH = 60
+# Only game-readable assets are shared. Programs, plugin records, scripts,
+# settings, metadata and caches always get independent physical files.
+SHARED_ASSETS = {'.bsa','.ba2','.dds','.nif','.hkx','.wav','.xwm','.fuz','.lip',
+                 '.wem','.png','.jpg','.jpeg','.tga','.bmp','.tif','.tiff',
+                 '.mp3','.ogg','.flac','.tri','.bto','.btr','.btt','.lod','.cgid'}
 
 def event(message, progress=0):
     print(json.dumps({'message': message, 'progress': progress}), flush=True)
@@ -100,6 +107,8 @@ def preflight(source,lab,check_running=True):
         raise ValueError('The installer package is incomplete or damaged. Extract the complete ZIP again.')
     if check_running:
         processes=subprocess.check_output(['tasklist','/fo','csv','/nh'],text=True,creationflags=0x08000000).casefold()
+        if '"robocopy.exe"' in processes:
+            raise ValueError('A file copy is still running. Finish or stop the old installer copy before starting this version.')
         if any('"'+name+'"' in processes for name in ('skyrimse.exe','skyrimtogether.exe','modorganizer.exe')):
             raise ValueError('Close Skyrim and Mod Organizer on this computer, then click Install again.')
     statefile=lab.parent/'LoreRim-LAN-install-state.json'
@@ -128,6 +137,101 @@ def source_size(source):
             if p.is_symlink(): raise ValueError('Linked content needs review before copying: '+str(p))
             total+=p.stat().st_size
     return total
+
+def source_files(source):
+    root=lancheck.longpath(source)
+    for base,dirs,files in os.walk(root,followlinks=False):
+        relative=Path(base).relative_to(root)
+        dirs[:]=[d for d in dirs if not (not relative.parts and d.casefold() in EXCLUDED)
+                 and not (relative.parts and relative.parts[0].casefold()=='profiles' and d.casefold()=='saves')]
+        for d in dirs:
+            p=Path(base)/d
+            if p.is_junction() or p.is_symlink(): raise ValueError('Linked source folder needs review: '+str(p))
+        for name in files:
+            p=Path(base)/name
+            if p.is_symlink(): raise ValueError('Linked source file needs review: '+str(p))
+            yield p,p.relative_to(root)
+
+def shared_asset(relative):
+    # Mod Organizer's overwrite folder and generated/runtime folders may be
+    # written even when their files happen to have an asset extension.
+    parts=[p.casefold() for p in relative.parts]
+    if any(p in ('overwrite','root','cache','logs','screenshots','enbcache','shadercache',
+                 'nemesis_engine','calientetools','tools') for p in parts):return False
+    in_assets=bool(parts and (parts[0]=='mods' or parts[:2]==['stock game','data']))
+    return in_assets and relative.suffix.casefold() in SHARED_ASSETS
+
+def same_volume(source,lab):
+    parent=lab.parent
+    while not parent.exists(): parent=parent.parent
+    if source.stat().st_dev!=parent.stat().st_dev:
+        raise ValueError('Choose a multiplayer folder on the SAME drive as your existing LoreRim. This version reuses its large game files instead of copying them.')
+
+def private_size(source):
+    # Reserve metadata space as well as bytes for the independent files.
+    total=0;count=0
+    for file,relative in source_files(source):
+        count+=1
+        if not shared_asset(relative):total+=file.stat().st_size
+    return total+count*4096
+
+def link_lab(source,lab,log):
+    """Share immutable game assets; isolate every program/config/fix target.
+
+    Replacing a lab hard-link entry never writes through to the source file.
+    Partial old physical copies can be converted one file at a time atomically.
+    """
+    source,lab=clean_path(source),clean_path(lab)
+    separate(source,lab)
+    same_volume(source,lab)
+    lab.mkdir(parents=True,exist_ok=True)
+    write_json(lab/'LORERIM_LAB.json',{'source':str(source),
+               'method':'shared asset hard links; private programs, scripts and settings',
+               'shared_asset_extensions':sorted(SHARED_ASSETS)})
+    linked=copied=private_bytes=shared_bytes=0;last=0;checked=set()
+    root=lancheck.longpath(lab)
+    for file,relative in source_files(source):
+        target=root/relative
+        # Check every parent before mkdir/replace; a resumed lab must never
+        # redirect an operation through a junction into the source tree.
+        for p in (target,*target.parents):
+            if p in checked:continue
+            if p.is_symlink() or p.is_junction():
+                raise ValueError('Linked destination path needs review: '+str(relative))
+            if p!=target:checked.add(p)
+        target.parent.mkdir(parents=True,exist_ok=True)
+        share=shared_asset(relative)
+        if target.exists():
+            if share and os.path.samefile(file,target):
+                linked+=1;shared_bytes+=file.stat().st_size
+                continue
+            if target.stat().st_nlink!=1:
+                raise ValueError('Unexpected shared destination file: '+str(relative))
+        temporary=target.with_name('.'+uuid.uuid4().hex+'.install-tmp')
+        try:
+            if share:
+                try:os.link(file,temporary)
+                except OSError as e:
+                    raise ValueError('Windows could not reuse game files on this destination. Choose a folder on the same local drive as LoreRim. '+str(e)) from e
+                linked+=1;shared_bytes+=file.stat().st_size
+            else:
+                shutil.copy2(file,temporary)
+                copied+=1;private_bytes+=file.stat().st_size
+            try:os.replace(temporary,target)
+            except PermissionError:
+                # Only a private destination entry may have its attribute
+                # changed. Never chmod a link to an original asset.
+                if not target.exists() or target.stat().st_nlink!=1:raise
+                target.chmod(target.stat().st_mode|stat.S_IWRITE)
+                os.replace(temporary,target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        if time.monotonic()-last>1:
+            event('Reusing game assets: '+str(linked)+' linked. Setting up '+str(copied)+' private files…',28)
+            last=time.monotonic()
+    result={'shared_files':linked,'private_files':copied,'shared_asset_bytes':shared_bytes,'copied_bytes':private_bytes}
+    write_json(log,result)
+    return result
 
 def download(url,sha,path,label):
     if path.exists() and digest(path)==sha: return path
@@ -215,21 +319,24 @@ def run(source,lab,host,check_only=False,desktop=None):
         event('Ready: matching Skyrim version, original fix files and '+str(count)+' plugins.',100)
         return
     if state is None:
-        event('Checking space for a separate LoreRim copy…',6)
-        needed=source_size(source)+3*1024**3
+        same_volume(source,lab)
+        event('Checking space for settings and compatibility files…',6)
+        needed=private_size(source)+3*1024**3
         parent=lab.parent
         while not parent.exists(): parent=parent.parent
         free=shutil.disk_usage(parent).free
-        if free<needed: raise ValueError('The destination needs about '+str((needed+1024**3-1)//1024**3)+' GB free. Choose a drive with more space.')
-        state={'format':1,'source':str(source),'lab':str(lab),'copied':False,'configured':False}
+        if free<needed: raise ValueError('The destination needs about '+str((needed+1024**3-1)//1024**3)+" GB free. Free space on LoreRim's drive and try again.")
+        state={'format':1,'source':str(source),'lab':str(lab),'copied':False,'configured':False,'storage':'shared-assets-v1'}
         write_json(statefile,state)
     cache=lab.parent/'installer-downloads'
     archive=download(STR_URL,STR_HASH,cache/'STR-1.8.3.zip','Skyrim Together')
     # Download and verify the other dependency before beginning the large copy.
     jc=download(jcontainers_update.URL,jcontainers_update.ARCHIVE_SHA256,cache/'JContainers-4.2.13.1.7z','JContainers memory update')
     if not state['copied']:
-        event('Copying LoreRim to its separate play folder. This can take a long time; keep this window open.',28)
-        copy_lab(source,lab,lab.parent/'LoreRim-copy.log')
+        same_volume(source,lab)
+        event('Reusing existing game assets and creating private settings…',28)
+        state['storage']='shared-assets-v1';write_json(statefile,state)
+        link_lab(source,lab,lab.parent/'LoreRim-link-report.json')
         state['copied']=True;write_json(statefile,state)
     package=cache/'STR'
     extract_zip(archive,package)
