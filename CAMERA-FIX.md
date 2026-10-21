@@ -57,6 +57,9 @@ recompiled camera source build.
 
 ## Next observed startup blocker
 
+Follow-up: [DOSEMETHA-FIX.md](DOSEMETHA-FIX.md) records a successful early-load
+correction for the failure below and the subsequently observed DynDOLOD blocker.
+
 This launch subsequently stopped at Don't send me there again (dosemetha):
 `main.cpp(110): Failed to hook GetLocationsCandidates`. The dialog and log agree.
 Installed mod metadata says 1.1.1.0; its own log reports v1-1-0-0. DLL SHA256:

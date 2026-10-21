@@ -89,8 +89,11 @@ Original tooling is MIT-licensed. Third-party assets are obtained directly from 
 
 **Update:** an opt-in, exact-build camera scanner correction is now available and
 installed in the test lab. SKSE reports that the camera loads correctly and
-continues to later plugins, then stops at dosemetha's `GetLocationsCandidates`
-hook failure. All 22 tooling tests pass. See [CAMERA-FIX.md](CAMERA-FIX.md) for installation,
+continues to later plugins. The subsequent dosemetha hook error is corrected by
+an unchanged-DLL early-load rename; see [DOSEMETHA-FIX.md](DOSEMETHA-FIX.md).
+Startup now stops at DynDOLOD's trampoline allocation failure; BSAMemoryMap
+also reports hook allocation failures. All 28 tooling tests pass.
+See [CAMERA-FIX.md](CAMERA-FIX.md) for installation,
 rollback, hashes and validation limits. Full camera behavior and multiplayer
 remain unverified. The following records the original failure and diagnosis.
 
