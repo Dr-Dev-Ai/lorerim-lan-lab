@@ -8,6 +8,10 @@ Initial target: LoreRim 5.0.4.8 / Skyrim 1.6.1170 / portable MO2. Different Lore
 
 ## Download and prepare the second PC
 
+**Use [SECOND-PC.md](SECOND-PC.md) for the complete current sequence, including
+all startup, transport and JContainers fixes. Setup-Lab alone is insufficient
+for the tested host configuration.**
+
 1. Download the repository ZIP using **Code â†’ Download ZIP**, then extract it.
 2. Install Python 3.12 or newer if missing. Locate the actual LoreRim folder containing `ModOrganizer.exe`, `ModOrganizer.ini`, `mods`, `profiles` and `Stock Game`. A Wabbajack download cache alone is not sufficient.
 3. Close Skyrim. In PowerShell, open this extracted folder and run:
@@ -125,3 +129,11 @@ initialization. The official 4.2.13.1 memory fix is installed in the isolated
 lab, with hash-pinned installation and rollback. The old DLL fails both native
 Lua tests under low-address-space pressure; the updated DLL passes both.
 See [JCONTAINERS-FIX.md](JCONTAINERS-FIX.md). In-game retry remains pending.
+
+## First accepted local connection
+
+On October 20, 2026 at 23:04:52 Pacific, the server accepted the lab player
+with all 3,492 mods while ModPolicy was active. The user screenshot shows
+in-world gameplay and “Successfully connected to server.” This verifies
+character load and one local client connection. Two-client LAN gameplay and
+combat/quest synchronization remain unverified.

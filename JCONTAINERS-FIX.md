@@ -60,3 +60,7 @@ No upstream DLL or script payload is redistributed by this repository.
 The original G: installation retains the original DLL hash. The local full
 crash log is preserved separately and is not uploaded. The restarted client reports JContainers64 4.2.13.1 loaded correctly in SKSE.
 Character loading and an accepted multiplayer connection remain unverified.
+
+Runtime follow-up: the user loaded the test character and connected locally on
+October 20, 2026 at 23:04:52 Pacific. The server accepted all 3,492 mods with
+ModPolicy active. Two-client gameplay remains unverified.

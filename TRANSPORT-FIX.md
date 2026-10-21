@@ -88,3 +88,7 @@ Sources inspected:
 [mod serialization](https://github.com/tiltedphoques/TiltedEvolution/blob/v1.8.3/Code/encoding/Structs/Mods.cpp),
 [TiltedCore v0.2.9 Buffer](https://github.com/tiltedphoques/TiltedCore/blob/v0.2.9/Code/core/src/Buffer.cpp),
 [ScratchAllocator](https://github.com/tiltedphoques/TiltedCore/blob/v0.2.9/Code/core/src/ScratchAllocator.cpp).
+
+Runtime follow-up: the user loaded the test character and connected locally on
+October 20, 2026 at 23:04:52 Pacific. The server accepted all 3,492 mods with
+ModPolicy active. Two-client gameplay remains unverified.
