@@ -1,0 +1,1 @@
+PASS: exact two-byte patch; both repaired native entries return safely; apply/retry; byte-exact restore/retry; shared-original preservation; changed-settings refusal before DLL write; unknown-DLL refusal; UTF-8 BOM preserved.

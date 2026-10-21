@@ -1,5 +1,16 @@
 # LoreRim LAN lab
 
+## Already installed, but crashing in Bestiary at the title screen?
+
+[Download Repair-LoreRim-Bestiary.exe](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.3.1-bestiary-repair/Repair-LoreRim-Bestiary.exe).
+Close Skyrim and Mod Organizer, then double-click that file on the affected PC.
+It finds the multiplayer installation or asks you to choose it. No reinstall is
+needed. This reversible workaround disables only Bestiary HUD popups; its journal
+and creature tracking remain. Her game test is still outstanding. It targets
+`DragonbornsBestiary.dll+004D717`, not other crash signatures.
+[Repair ZIP with restore button](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.3.1-bestiary-repair/LoreRim-Bestiary-Repair.zip)
+· [Details and validation](BESTIARY-REPAIR.md).
+
 ## Download the all-in-one installer
 
 ### [Download LoreRim Together Installer for Windows](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.3.0-experimental/LoreRim-Together-Installer.zip)
