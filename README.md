@@ -110,3 +110,10 @@ The follow-up investigation reproduced the error and inspected the installed Imp
 Source references: [STR loader](https://github.com/tiltedphoques/TiltedEvolution/blob/4917189f6ac382e874f9ee735c4fef6a350e449e/Code/immersive_launcher/loader/PathRerouting.cpp), [original camera scanner](https://github.com/NasiRawon/AlternateConversationCamera/blob/aa815816fc38aa85f5e23a186742d931bf99de2b/PatternScanner.h), [installed camera mod page](https://www.nexusmods.com/skyrimspecialedition/mods/68210).
 
 Sixteen tests pass on Windows x64, including byte-preserving dependency staging, refusal to overwrite a different DLL, bounded diagnostic reads and a read-only self-process capture. C++ compilation and two-client gameplay are NOT verified. Existing labs can run `python loader_fix.py <lab-folder>` with all lab processes closed; it requires the lab marker. New setups apply this automatically.
+
+## Large plugin-list connection failure
+
+The first ModPolicy rejection contained empty plugin names after the client
+send pool exhausted its capacity. The exact-build correction, native regression
+and rollback procedure are recorded in [TRANSPORT-FIX.md](TRANSPORT-FIX.md).
+Keep ModPolicy enabled; empty names are not a reason to remove mods.

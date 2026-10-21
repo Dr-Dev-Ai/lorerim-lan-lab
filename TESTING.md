@@ -12,7 +12,8 @@ The opt-in correction in [CAMERA-FIX.md](CAMERA-FIX.md) now passes camera-plugin
 loading; complete camera behavior and full gameplay validation remain pending.
 The later allocation and blink-scanner corrections are documented in
 [BSA-MAPPING-FIX.md](BSA-MAPPING-FIX.md). Use the same tested adapter on both PCs,
-regenerate parity manifests and retain rollback files. Startup observations do
+regenerate parity manifests and retain rollback files. For the large-list
+connection rejection, also apply [TRANSPORT-FIX.md](TRANSPORT-FIX.md) on both PCs. Startup observations do
 not pass the gameplay rows below.
 
 1. Use two licensed PCs on wired LAN, with independent physical lab copies and new profile-local saves. Keep normal play saves outside the lab. Both PCs must use the same runtime-specific STR 1.8.3 asset.
