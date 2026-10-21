@@ -67,7 +67,7 @@ The manifest hashes the effective loose-file view, opaque archives, Root Builder
 Run tooling tests with:
 
 ```powershell
-python -m unittest discover -s . -p test_lancheck.py -v
+python -m unittest discover -s . -p 'test_*.py' -v
 ```
 
 Measure basic network RTT with `measure_lan.ps1 -Peer <peer-IP> -Output lan-rtt.csv`. This is ICMP, not game event latency or frame time. TESTING.md separates these measurements.
@@ -91,8 +91,8 @@ On the isolated LoreRim 5.0.4.8 / Skyrim 1.6.1170 host, STR 1.8.3 initially stop
 
 The retry then stopped at Improved Alternate Conversation Camera 1.2.0.0 with `[ERROR] Unknown pattern: 0f28c1f30f5ec60f28f0`. No game menu, connection or gameplay was reached. The camera remains enabled. Do not skip this error and treat that as compatibility.
 
-The smallest feature-preserving next fix is to correct the camera's pattern-scan/module-range handling or its specific conflicting hook, after confirming which fails under STR's mapped executable. The older original camera source uses GetModuleHandle(0), GetModuleInformation and executable-page scanning; it is not confirmed identical to the installed Improved 1.2 binary. This is a diagnostic hypothesis, not a verified replacement. Matching source, native build tools and binary/debugger verification are still needed. Do not apply guessed offsets or remove the camera silently.
+The follow-up investigation reproduced the error and inspected the installed Improved DLL and live STR image. The requested bytes occur on a PAGE_EXECUTE_READWRITE (`0x40`) page, but this camera scan tests for PAGE_EXECUTE_READ (`0x20`) and skips that page. See [CAMERA-DIAGNOSIS.md](CAMERA-DIAGNOSIS.md) for hashes, disassembly observations, live evidence, limitations and the read-only `camera_probe.py` procedure. This explains the first failed scan; a feature-preserving native repair and later-hook validation remain outstanding. No native patch was applied.
 
 Source references: [STR loader](https://github.com/tiltedphoques/TiltedEvolution/blob/4917189f6ac382e874f9ee735c4fef6a350e449e/Code/immersive_launcher/loader/PathRerouting.cpp), [original camera scanner](https://github.com/NasiRawon/AlternateConversationCamera/blob/aa815816fc38aa85f5e23a186742d931bf99de2b/PatternScanner.h), [installed camera mod page](https://www.nexusmods.com/skyrimspecialedition/mods/68210).
 
-Eight automated tooling tests pass, including byte-preserving dependency staging and refusal to overwrite a different DLL. C++ compilation and two-client gameplay are NOT verified. Existing labs can run `python loader_fix.py <lab-folder>` with all lab processes closed; it requires the lab marker. New setups apply this automatically.
+Sixteen tests pass on Windows x64, including byte-preserving dependency staging, refusal to overwrite a different DLL, bounded diagnostic reads and a read-only self-process capture. C++ compilation and two-client gameplay are NOT verified. Existing labs can run `python loader_fix.py <lab-folder>` with all lab processes closed; it requires the lab marker. New setups apply this automatically.
