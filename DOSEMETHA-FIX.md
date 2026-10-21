@@ -62,6 +62,12 @@ to patch in other builds. Radiant quest selection still requires gameplay tests.
 
 ## Remaining blocker
 
+Follow-up: [BSA-MAPPING-FIX.md](BSA-MAPPING-FIX.md) records the subsequently
+installed allocation adapter and successful DynDOLOD/BSA hook initialization.
+The adapter now allows the unchanged DLL to load under its canonical
+`dosemetha.dll` filename; the early rename has been restored in this lab.
+The following records the prior failing launch.
+
 Startup continued past dosemetha, then stopped at DynDOLOD:
 `SKSE/Trampoline.cpp(54): failed to create trampoline`.
 BSAMemoryMap also still logs its own hook allocation failures. No main menu,

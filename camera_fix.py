@@ -38,17 +38,31 @@ def digest(data):
 
 
 def patched(data):
-    if digest(data) != ORIGINAL_SHA256:
-        raise ValueError('Unsupported camera DLL; refusing to patch')
+    return patch_bytes(data, ORIGINAL_SHA256, PATCHES)
+
+
+def patch_bytes(data, expected_hash, patches):
+    if digest(data) != expected_hash:
+        raise ValueError('Unsupported DLL; refusing to patch')
     result = bytearray(data)
-    for offset, expected in PATCHES:
+    for entry in patches:
+        offset, expected = entry[:2]
         if data[offset:offset + len(expected)] != expected:
-            raise ValueError('Scanner instructions do not match')
-        result[offset + 1] = 0x60  # RX | RWX; retain MEM_COMMIT and guard checks.
+            raise ValueError('Verified instructions do not match')
+        if len(entry) == 3:
+            if len(entry[2]) != len(expected):
+                raise ValueError('Replacement must preserve instruction extent')
+            result[offset:offset + len(expected)] = entry[2]
+        else:
+            result[offset + 1] = 0x60  # RX | RWX; retain MEM_COMMIT and guard checks.
     return bytes(result)
 
 
 def apply(lab, restore=False):
+    return apply_exact(lab, DLL, ORIGINAL_SHA256, PATCHES, 'camera-fix-backup', restore)
+
+
+def apply_exact(lab, dll, expected_hash, patches, backup_folder, restore=False):
     lab = Path(lab).resolve()
     marker = json.loads((lab / 'LORERIM_LAB.json').read_text(encoding='utf-8-sig'))
     source = Path(marker['source']).resolve()
@@ -59,17 +73,17 @@ def apply(lab, restore=False):
     processes = subprocess.check_output(['tasklist', '/fo', 'csv', '/nh'], text=True).casefold()
     if any('"' + name + '"' in processes for name in ('skyrimse.exe', 'skyrimtogether.exe')):
         raise ValueError('Close all game clients before changing the DLL')
-    target = lab / DLL
+    target = lab / dll
     if any(p.is_symlink() or p.is_junction() for p in [target, *target.parents]):
         raise ValueError('Linked installation requires manual review')
-    backup = lab / 'camera-fix-backup' / 'AlternateConversationCamera.dll.original'
+    backup = lab / backup_folder / (dll.name + '.original')
     if target.stat().st_nlink != 1 or any(p.is_symlink() or p.is_junction() for p in (backup, backup.parent)):
         raise ValueError('Linked DLL or backup requires manual review')
     current = target.read_bytes()
     original = backup.read_bytes() if backup.exists() else current
-    replacement = patched(original)
+    replacement = patch_bytes(original, expected_hash, patches)
     if current not in (original, replacement):
-        raise ValueError('Camera changed since backup; refusing overwrite')
+        raise ValueError('DLL changed since backup; refusing overwrite')
     wanted = original if restore else replacement
     if current == wanted:
         return {'status': 'already restored' if restore else 'already patched', 'sha256': digest(current)}
@@ -93,7 +107,7 @@ def apply(lab, restore=False):
     if target.read_bytes() != wanted:
         raise ValueError('Installed DLL verification failed')
     return {'status': 'restored' if restore else 'patched', 'sha256': digest(wanted),
-            'backup': str(backup), 'changed_offsets': [offset + 1 for offset, _ in PATCHES],
+            'backup': str(backup), 'changed_offsets': [i for i, (a, b) in enumerate(zip(original, replacement)) if a != b],
             'gameplay_verified': False}
 
 
