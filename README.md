@@ -1,5 +1,22 @@
 # LoreRim LAN lab
 
+## Download the all-in-one installer
+
+### [Download LoreRim Together Installer for Windows](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.2.0-experimental/LoreRim-Together-Installer.zip)
+
+Download the ZIP above, choose **Extract All**, then open
+**Install LoreRim Together.exe** and click **Install** after choosing your
+LoreRim folder. The installer handles downloads and all compatibility fixes,
+then creates a **Play LoreRim Together** desktop shortcut.
+
+**Use this installer download, not the green Code → Download ZIP button.**
+That button downloads developer source files. No Python installation or commands
+are needed for the installer. It requires your existing matching LoreRim
+5.0.4.8 installation and room for a separate copy.
+
+[Release page and download assets](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/tag/v0.2.0-experimental)
+· [Simple installation guide](SECOND-PC.md)
+
 **Experimental setup and verification tooling. Not a certified LoreRim multiplayer patch.**
 
 This project preserves an existing LoreRim installation in a separate physical copy, adds the official Skyrim Together Reborn **1.8.3 build for Skyrim 1.6.1170**, and provides strict file-parity checks and a two-client acceptance procedure. It does not claim that connecting means Requiem, combat, quests or scripted systems synchronize correctly.
