@@ -117,3 +117,11 @@ The first ModPolicy rejection contained empty plugin names after the client
 send pool exhausted its capacity. The exact-build correction, native regression
 and rollback procedure are recorded in [TRANSPORT-FIX.md](TRANSPORT-FIX.md).
 Keep ModPolicy enabled; empty names are not a reason to remove mods.
+
+## JContainers crash on character load
+
+The follow-up crash was a null Lua interpreter during JContainers 4.2.9
+initialization. The official 4.2.13.1 memory fix is installed in the isolated
+lab, with hash-pinned installation and rollback. The old DLL fails both native
+Lua tests under low-address-space pressure; the updated DLL passes both.
+See [JCONTAINERS-FIX.md](JCONTAINERS-FIX.md). In-game retry remains pending.

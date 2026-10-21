@@ -1,0 +1,23 @@
+version: 4.2.9
+Reserved free address space below 2 GiB: 2147352576 bytes; RAM not committed.
+Note: Google Test filter = fixture.Lua_evalLua:fixture.Lua_launch_all_lua_tests
+[==========] Running 2 tests from 1 test case.
+[----------] Global test environment set-up.
+[----------] 2 tests from fixture
+[ RUN      ] fixture.Lua_evalLua
+unknown file: error: SEH exception with code 0xc0000005 thrown in the test body.
+[  FAILED  ] fixture.Lua_evalLua (1 ms)
+[ RUN      ] fixture.Lua_launch_all_lua_tests
+unknown file: error: SEH exception with code 0xc0000005 thrown in the test body.
+[  FAILED  ] fixture.Lua_launch_all_lua_tests (1 ms)
+[----------] 2 tests from fixture (2 ms total)
+
+[----------] Global test environment tear-down
+[==========] 2 tests from 1 test case ran. (2 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 2 tests, listed below:
+[  FAILED  ] fixture.Lua_evalLua
+[  FAILED  ] fixture.Lua_launch_all_lua_tests
+
+ 2 FAILED TESTS
+test status: 1

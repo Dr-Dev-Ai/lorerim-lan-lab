@@ -1,0 +1,38 @@
+version: 4.2.13.1
+Reserved free address space below 2 GiB: 2147352576 bytes; RAM not committed.
+Note: Google Test filter = fixture.Lua_evalLua:fixture.Lua_launch_all_lua_tests
+[==========] Running 2 tests from 1 test case.
+[----------] Global test environment set-up.
+[----------] 2 tests from fixture
+[ RUN      ] fixture.Lua_evalLua
+reopen_if_closed(): initial Lua allocation failed; retrying up to 3 minutes (32-bit or low memory)
+loading C declarations at ..JCData/InternalLuaScripts/api_for_lua.h
+loading dll at ..ate/Data/SKSE/Plugins/JContainers64.dll
+Lua context created
+JDB.test	test	10
+Lua context destructed
+[       OK ] fixture.Lua_evalLua (1017 ms)
+[ RUN      ] fixture.Lua_launch_all_lua_tests
+reopen_if_closed(): initial Lua allocation failed; retrying up to 3 minutes (32-bit or low memory)
+loading C declarations at ..JCData/InternalLuaScripts/api_for_lua.h
+loading dll at ..ate/Data/SKSE/Plugins/JContainers64.dll
+Lua context created
+trying to load	testing.init
+trying to load	testing.misc
+trying to load	testing.basic
+Start a set	Basic container tests	of	1	functions
+test	basicTest	succeed
+trying to load	testing.jc-tests
+trying to load	jc
+Start a set	Misc functionality tests	of	3	functions
+test	accumulateKeys	succeed
+test	accumulateValues + pathResolving	succeed
+test	accumulateValues	succeed
+Lua context destructed
+[       OK ] fixture.Lua_launch_all_lua_tests (1025 ms)
+[----------] 2 tests from fixture (2042 ms total)
+
+[----------] Global test environment tear-down
+[==========] 2 tests from 1 test case ran. (2042 ms total)
+[  PASSED  ] 2 tests.
+test status: 0
