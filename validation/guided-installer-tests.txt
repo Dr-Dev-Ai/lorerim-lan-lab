@@ -1,0 +1,15 @@
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Applying all compatibility fixes\u2026", "progress": 78}
+{"message": "Verifying the finished installation\u2026", "progress": 94}
+{"message": "Installed! Use the Play LoreRim Together desktop shortcut. Press F2 in-game and connect to 10.0.0.250:10578. Password: LoreRimLab", "progress": 100}
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Checking space for a separate LoreRim copy\u2026", "progress": 6}
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Applying all compatibility fixes\u2026", "progress": 78}
+{"message": "Downloading Test\u2026", "progress": 12}
+{"message": "Downloading Test: 0 MB", "progress": 12}
+..............................................
+----------------------------------------------------------------------
+Ran 46 tests in 0.474s
+
+OK

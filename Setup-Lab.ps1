@@ -1,5 +1,9 @@
 param([string]$Source, [string]$Destination)
 $ErrorActionPreference = 'Stop'
+$adapter = Join-Path $PSScriptRoot 'adapter\BSAMemoryMap.dll'
+if (-not (Test-Path -LiteralPath $adapter)) {
+    throw 'Use the complete guided installer release (includes the tested adapter), not the GitHub source ZIP.'
+}
 if (-not $Source) { $Source = Read-Host 'Folder containing your LoreRim ModOrganizer.exe (not just downloads)' }
 if (-not $Destination) { $Destination = Read-Host 'NEW lab folder, preferably a short path such as D:\LoreRim-LAN\LoreRim' }
 $Source = (Resolve-Path -LiteralPath $Source).Path
@@ -34,4 +38,10 @@ if (Test-Path -LiteralPath $package) { throw 'Upstream extraction folder exists;
 Expand-Archive -LiteralPath $zip -DestinationPath $package
 & python (Join-Path $PSScriptRoot 'prepare_lab.py') $Source $Destination $package
 if ($LASTEXITCODE -ne 0) { throw 'Configuration failed. Do not launch an incomplete lab.' }
-Write-Output 'Lab prepared, not gameplay certified. Follow README and TESTING before connecting. Original saves remain separate.'
+foreach ($fix in @('camera_fix.py','blink_fix.py','alttab_fix.py','transport_fix.py','jcontainers_update.py')) {
+    & python (Join-Path $PSScriptRoot $fix) $Destination
+    if ($LASTEXITCODE -ne 0) { throw "Compatibility setup failed at $fix. Do not launch an incomplete lab." }
+}
+& python (Join-Path $PSScriptRoot 'bsa_guard_fix.py') $Destination --adapter $adapter
+if ($LASTEXITCODE -ne 0) { throw 'BSA compatibility setup failed. Do not launch an incomplete lab.' }
+Write-Output 'Lab and all compatibility fixes installed. Follow TESTING before playing together. Original saves remain separate.'

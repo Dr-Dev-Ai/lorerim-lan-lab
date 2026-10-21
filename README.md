@@ -6,46 +6,18 @@ This project preserves an existing LoreRim installation in a separate physical c
 
 Initial target: LoreRim 5.0.4.8 / Skyrim 1.6.1170 / portable MO2. Different LoreRim versions need their own assessment. Each PC needs its own licensed game and installed modpack. No game files, mod assets or saves are distributed here.
 
-## Download and prepare the second PC
+## Install on the second computer
 
-**Use [SECOND-PC.md](SECOND-PC.md) for the complete current sequence, including
-all startup, transport and JContainers fixes. Setup-Lab alone is insufficient
-for the tested host configuration.**
+1. [Download the guided installer ZIP](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.2.0-experimental/LoreRim-Together-Installer.zip).
+2. Extract it, then double-click **Install LoreRim Together.exe**.
+3. Choose the existing LoreRim folder and click **Install**. Setup handles the
+   downloads and all compatibility fixes, then creates a desktop play shortcut.
 
-1. Download the repository ZIP using **Code → Download ZIP**, then extract it.
-2. Install Python 3.12 or newer if missing. Locate the actual LoreRim folder containing `ModOrganizer.exe`, `ModOrganizer.ini`, `mods`, `profiles` and `Stock Game`. A Wabbajack download cache alone is not sufficient.
-3. Close Skyrim. In PowerShell, open this extracted folder and run:
-
-   ```powershell
-   .\Setup-Lab.ps1
-   ```
-
-   Enter your existing installation path and a **new, short destination**, such as `D:\LoreRim-LAN\LoreRim`. Allow at least 300 GB free for a typical installation, plus backup space. The script copies profiles/saves to a separate backup, physically copies the installation excluding top-level download/cache/log folders and profile saves, downloads the official runtime-specific STR release, verifies its pinned SHA256, and configures a new **LoreRim LAN Test** profile. It never disables an original mod. It hides STR's two pet-suppression scripts and logo meshes so the installed pet behavior and LoreRim branding keep winning; pet multiplayer remains unverified. This is a lengthy disk copy.
-
-4. Read the generated `str-overrides.json`. It reports loose-file conflicts introduced by STR; archived script conflicts remain a separate audit task.
-5. Generate a full manifest on each PC before playing:
-
-   ```powershell
-   python .\lancheck.py snapshot 'D:\LoreRim-LAN\LoreRim' 'LoreRim LAN Test' my-manifest.json --full --server-config 'D:\LoreRim-LAN\server\config\STServer.ini'
-   ```
-
-6. Exchange only the manifests privately. Compare:
-
-   ```powershell
-   python .\lancheck.py compare host-manifest.json guest-manifest.json differences.json
-   ```
-
-   Exit 0: parity under the documented scope. Exit 2: explicit mismatches. Exit 3: invalid/incomplete inputs or read failures. Review differences instead of silently removing mods. A fresh local manifest plus a fresh peer manifest is required for meaningful results.
-
-7. Match in-save MCM settings manually, including Requiem, Experience, Static Skill Leveling, Respawn, dodge, Precision and combat settings. File parity cannot verify save-resident state.
-
-For a launch gated by parity:
-
-```powershell
-.\start_checked.ps1 -Lab 'D:\LoreRim-LAN\LoreRim' -PeerManifest '.\guest-manifest.json' -HostServer
-```
-
-Omit `-HostServer` on the guest. This opens the isolated MO2; run **LoreRim LAN Test**. If asked for the game, select the **lab's** Stock Game/SkyrimSE.exe. Do not select the original or Steam's newer executable.
+No Python installation or typed commands are needed. Both PCs need matching
+LoreRim 5.0.4.8 / Skyrim 1.6.1170. Leave room for a separate physical LoreRim copy.
+See [SECOND-PC.md](SECOND-PC.md) for joining, or [installer/README.md](installer/README.md)
+for installer behavior, validation and building from source. The GitHub **Code →
+Download ZIP** option contains source, not the ready-to-use installer.
 
 ## LAN configuration
 
@@ -134,6 +106,6 @@ See [JCONTAINERS-FIX.md](JCONTAINERS-FIX.md). In-game retry remains pending.
 
 On October 20, 2026 at 23:04:52 Pacific, the server accepted the lab player
 with all 3,492 mods while ModPolicy was active. The user screenshot shows
-in-world gameplay and �Successfully connected to server.� This verifies
+in-world gameplay and “Successfully connected to server.” This verifies
 character load and one local client connection. Two-client LAN gameplay and
 combat/quest synchronization remain unverified.

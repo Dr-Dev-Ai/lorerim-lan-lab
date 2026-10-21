@@ -1,0 +1,12 @@
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Checking space for a separate LoreRim copy\u2026", "progress": 6}
+{"message": "Copying LoreRim to its separate play folder. This can take a long time; keep this window open.", "progress": 28}
+{"message": "Setting up the multiplayer profile\u2026", "progress": 65}
+{"message": "Applying all compatibility fixes\u2026", "progress": 78}
+{"message": "Verifying the finished installation\u2026", "progress": 94}
+{"message": "Installed! Use the Play LoreRim Together desktop shortcut. Press F2 in-game and connect to 10.0.0.250:10578. Password: LoreRimLab", "progress": 100}
+{"message": "Checking your LoreRim installation\u2026", "progress": 3}
+{"message": "Applying all compatibility fixes\u2026", "progress": 78}
+{"message": "Verifying the finished installation\u2026", "progress": 94}
+{"message": "Installed! Use the Play LoreRim Together desktop shortcut. Press F2 in-game and connect to 10.0.0.250:10578. Password: LoreRimLab", "progress": 100}
+PASS: real physical copy, real STR configuration and loader staging, all six actual fixes, complete verification, native desktop shortcuts, and idempotent retry. Original fixture files remained unchanged. Runtime/gameplay were not launched by this test.

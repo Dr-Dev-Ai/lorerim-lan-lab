@@ -1,0 +1,6 @@
+{"message": "Downloading Skyrim Together\u2026", "progress": 12}
+{"message": "Downloading Skyrim Together: 1 MB of 158 MB", "progress": 12}
+{"message": "Downloading Skyrim Together: 102 MB of 158 MB", "progress": 12}
+{"message": "Downloading JContainers\u2026", "progress": 12}
+{"message": "Downloading JContainers: 0 MB of 0 MB", "progress": 12}
+Both automatic downloads passed their pinned SHA256 checks.

@@ -1,102 +1,39 @@
-# Install the second LoreRim LAN computer
+# Install LoreRim Together
 
-This guide reproduces the host setup that successfully loaded a character and
-connected to the server on October 20, 2026 at 23:04:52 Pacific. The server
-accepted all 3,492 plugins with ModPolicy enabled. Two-computer gameplay,
-combat and quest synchronization have not yet been verified.
+You already need the same LoreRim 5.0.4.8 installation as the host.
 
-## What to transfer
+1. [Download the installer ZIP](https://github.com/Dr-Dev-Ai/lorerim-lan-lab/releases/download/v0.2.0-experimental/LoreRim-Together-Installer.zip).
+2. Right-click it and choose **Extract All**. Open the extracted folder.
+3. Double-click **Install LoreRim Together.exe**.
+4. The installer should find LoreRim. If it does not, click **Browse** and select
+   the folder containing **ModOrganizer.exe**.
+5. Choose a drive with room for a separate LoreRim copy and click **Install**.
+   Close Skyrim and Mod Organizer first. Leave the installer open while it copies.
+6. When it says **Ready to play**, use the new **Play LoreRim Together** desktop shortcut.
 
-Use the complete `LoreRim-Startup-Fix.zip` package supplied with the chat,
-including its `adapter` folder. A GitHub source ZIP alone does not include the
-built adapter. Extract the package into a short folder, for example
-`D:\LoreRim-LAN-Tools`. It contains our tooling and adapter, not LoreRim itself.
+That is the complete installation. Setup handles the downloads, runtime and
+all compatibility fixes. No commands or separate Python installation are needed.
+Your original LoreRim stays separate. The copy can take a long time.
 
-The second PC needs Windows, its own licensed Skyrim installation, Python
-3.12 or newer, and the same installed **LoreRim 5.0.4.8 / Skyrim 1.6.1170**
-modpack. Do not substitute a different LoreRim release or current Steam runtime.
-Allow space for a separate physical lab copy in addition to the existing
-installation. The setup script excludes the download cache and existing saves.
+## Join the game
 
-## Create the isolated lab and apply every fix
+1. Open **Play LoreRim Together** from the desktop.
+2. Create or load your own lab character. Wait for the mods to finish starting.
+3. Press **F2**, then Connect.
+4. On your current home network, enter **10.0.0.250:10578**.
+5. Enter password **LoreRimLab**.
+6. Join the host's party through Player Manager.
 
-Close the second PC's game and MO2. Open PowerShell in the extracted tools
-folder. The example below assumes its normal LoreRim installation is
-`D:\Modlists\LoreRim`; replace that source path with the actual folder
-containing ModOrganizer.exe. The destination must be a new folder.
+The first computer must have the server running. The host computer uses
+127.0.0.1:10578; the second computer uses the host address shown above.
+If the host's LAN address changes, enter its new address instead.
 
-```powershell
-.\Setup-Lab.ps1 -Source 'D:\Modlists\LoreRim' -Destination 'D:\LoreRim-LAN\LoreRim'
-```
+## If something goes wrong
 
-After setup finishes successfully, apply these fixes from the same tools folder:
+Click **Open setup log** and send the log back for help. If a download or copy
+was interrupted, click **Try again**. Do not delete the partial installation;
+the installer can resume it. If the destination is too full, choose another drive.
 
-```powershell
-python .\camera_fix.py 'D:\LoreRim-LAN\LoreRim'
-python .\bsa_guard_fix.py 'D:\LoreRim-LAN\LoreRim' --adapter '.\adapter\BSAMemoryMap.dll'
-python .\blink_fix.py 'D:\LoreRim-LAN\LoreRim'
-python .\alttab_fix.py 'D:\LoreRim-LAN\LoreRim'
-python .\transport_fix.py 'D:\LoreRim-LAN\LoreRim'
-python .\jcontainers_update.py 'D:\LoreRim-LAN\LoreRim'
-```
-
-Run each command only after the preceding command succeeds. If an installer
-reports an unsupported hash or other error, stop and retain the error for
-review; it means that computer does not match the tested files. Do not force
-it or disable mods. The JContainers command downloads and verifies the official
-4.2.13.1 package. The dependency loader fix is already applied by Setup-Lab.
-Do not apply the superseded dosemetha filename workaround.
-
-If Windows prevents running the PowerShell setup script, report the exact
-message so the setup can be handled through an appropriate local method.
-
-## Match the two installations
-
-Before playing together, close both game clients and create full manifests.
-On the host, use its actual lab path and host server config. On the guest:
-
-```powershell
-python .\lancheck.py snapshot 'D:\LoreRim-LAN\LoreRim' 'LoreRim LAN Test' guest-manifest.json --full --server-config 'D:\LoreRim-LAN\server\config\STServer.ini'
-```
-
-Exchange manifests privately and compare them from the tools folder:
-
-```powershell
-python .\lancheck.py compare host-manifest.json guest-manifest.json differences.json
-```
-
-Review any differences; do not remove mods just to clear the check. Match
-in-save MCM settings as well, since manifests cannot inspect those settings.
-Use separate disposable lab characters rather than regular playthrough saves.
-
-## Launch and connect
-
-1. Open **D:\LoreRim-LAN\LoreRim\ModOrganizer.exe** on the second PC.
-2. Select the **LoreRim LAN Test** profile and **LoreRim LAN Test** executable,
-   then click Run. If prompted for Skyrim, choose the lab's
-   `Stock Game\SkyrimSE.exe`.
-3. Create the second player's own character. Finish the starting sequence
-   and wait for Requiem/mod initialization before connecting.
-4. Leave the dedicated server running on the first PC. The second PC does
-   not need to start its generated server.
-5. Press **F2** (or right Ctrl), choose Connect, enter the **first PC's LAN IP
-   followed by :10578**, and use password **LoreRimLab**.
-6. The host creates a party; the second player joins it through Player Manager.
-   Keep one party leader for quest progression, then follow TESTING.md.
-
-For this host at the time of writing, the Ethernet address is
-**10.0.0.250**, so the guest joins **10.0.0.250:10578**. The host itself joins
-**127.0.0.1:10578**. If the host's address changes, use its new Ethernet IPv4
-address. 127.0.0.1 on the guest would point to the guest itself.
-
-For same-LAN play, router port forwarding is unnecessary. If the guest times
-out, check that the server is running and that the host firewall allows its
-server executable on UDP 10578 for the private local network. No firewall
-settings were changed by this package.
-
-## Rollback
-
-The original installation remains separate. Close the lab game/MO2 and reopen
-the original MO2 to play normally. Each fix has its own restore procedure in
-its accompanying guide; retain the lab backup folders. Do not copy lab saves
-into your regular playthrough.
+The initial host test successfully loaded a character and connected with all
+3,492 plugins. Two-computer combat and quest synchronization still need testing.
+Technical details and validation are in [installer/README.md](installer/README.md).

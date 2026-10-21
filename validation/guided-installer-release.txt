@@ -1,0 +1,3 @@
+Installer ZIP SHA256: c2e9c2aabd37ab3f97fd0c3259634650e93e6a0d6ee45e6cdd0156d476c3efaf
+Size: 11276158 bytes
+All 54 packaged file hashes verified after ZIP build. No Skyrim/STR/JContainers DLL payloads redistributed. Official Python license and MinHook license included.
