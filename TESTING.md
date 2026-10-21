@@ -4,10 +4,12 @@
 
 ## Preparation
 
-Startup is currently blocked by the enabled conversation camera. See
+The original startup failure was the enabled conversation camera. See
 [CAMERA-DIAGNOSIS.md](CAMERA-DIAGNOSIS.md) for the reproduced failure and read-only
 capture procedure. A completed probe is diagnostic evidence, not a passed launch
 or acceptance test. Preserve the failed attempt before trying a native repair.
+The opt-in correction in [CAMERA-FIX.md](CAMERA-FIX.md) now passes camera-plugin
+loading; complete camera behavior and full gameplay validation remain pending.
 
 1. Use two licensed PCs on wired LAN, with independent physical lab copies and new profile-local saves. Keep normal play saves outside the lab. Both PCs must use the same runtime-specific STR 1.8.3 asset.
 2. Close the game, generate full manifests on both machines, and compare. Resolve every mismatch explicitly. Root/profile location may differ; gameplay content and ordering may not. Any graphics-only mismatch still blocks strict parity until reviewed rather than silently ignored.

@@ -1,5 +1,8 @@
 # Camera startup investigation — 2026-10-20
 
+Historical investigation below. Follow-up [CAMERA-FIX.md](CAMERA-FIX.md) records
+the subsequently installed correction and successful camera-plugin loading.
+
 Status: first failing scan explained by installed-binary and live-memory evidence.
 **No native fix applied. No main menu or gameplay validation.**
 

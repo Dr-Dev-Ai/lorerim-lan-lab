@@ -87,6 +87,13 @@ Original tooling is MIT-licensed. Third-party assets are obtained directly from 
 
 ## Reproduced startup blockers (2026-10-20)
 
+**Update:** an opt-in, exact-build camera scanner correction is now available and
+installed in the test lab. SKSE reports that the camera loads correctly and
+continues to later plugins, then stops at dosemetha's `GetLocationsCandidates`
+hook failure. All 22 tooling tests pass. See [CAMERA-FIX.md](CAMERA-FIX.md) for installation,
+rollback, hashes and validation limits. Full camera behavior and multiplayer
+remain unverified. The following records the original failure and diagnosis.
+
 On the isolated LoreRim 5.0.4.8 / Skyrim 1.6.1170 host, STR 1.8.3 initially stopped because KiENBExtender.dll could not locate KiHalloc.dll. The loader excludes PATH from DLL search but explicitly searches the launcher directory. `loader_fix.py` now copies the existing effective KiLoader dependency into that directory, verifies its SHA256 and refuses conflicting files. No third-party DLL is distributed. The retry loaded both DLLs; this verifies dependency loading only.
 
 The retry then stopped at Improved Alternate Conversation Camera 1.2.0.0 with `[ERROR] Unknown pattern: 0f28c1f30f5ec60f28f0`. No game menu, connection or gameplay was reached. The camera remains enabled. Do not skip this error and treat that as compatibility.
