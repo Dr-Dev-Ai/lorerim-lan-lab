@@ -3,6 +3,7 @@ import json
 import shutil
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from .store import Store, Conflict, canonical
 from .checkpoints import blob_path, verify_snapshot, sha_file
@@ -27,6 +28,9 @@ def prepare_recovery(store, cid, pid, checkpoint_id, destination):
         if state['campaign']['id'] != cid or state['campaign']['revision'] != selected['revision']:
             raise Conflict('Checkpoint domain state does not match its revision')
         recorded = {row['id'] for row in state['player']}
+        bindings={row['player']:row for row in state.get('native_player',[])}
+        if bindings and set(bindings)!=recorded:raise Conflict('Managed recovery requires native identities for every player')
+        recovery_epoch=str(uuid.uuid4())
         current = {row['id']: dict(row) for row in store.db.execute('SELECT * FROM player WHERE campaign=?', (cid,))}
         if recorded != set(current):
             raise Conflict('Campaign membership changed; automatic historical identity recovery is unavailable')
@@ -60,6 +64,7 @@ def prepare_recovery(store, cid, pid, checkpoint_id, destination):
                                  tuple(row[column] for column in columns))
             with clone.transaction():
                 insert('campaign', campaign)
+                clone.db.execute('INSERT INTO native_epoch VALUES(?,?)',(cid,recovery_epoch))
                 for player in state['player']:
                     row = dict(current[player['id']]); row['name'] = player['name']; row['online'] = 0
                     insert('player', row)
@@ -87,9 +92,28 @@ def prepare_recovery(store, cid, pid, checkpoint_id, destination):
                     shutil.copyfile(blob_path(clone, info['sha256']), target)
                     if sha_file(target) != info['sha256']:
                         raise Conflict('Recovery output failed hash verification')
+                if bindings:
+                    from .cosave import rebranch,read_identity
+                    from .checkpoints import put_blob
+                    target=staging/'players'/snapshot['player']/'save/character.skse'
+                    replacement=target.with_name('character.rebranched.skse')
+                    identity=rebranch(target,replacement,recovery_epoch,checkpoint_id,clone.campaign(cid)['revision'])
+                    if identity['character']!=bindings[snapshot['player']]['character'] or identity['campaign']!=cid:
+                        raise Conflict('Historical native identity differs from the checkpoint player binding')
+                    replacement.replace(target)
+                    files['save/character.skse']=put_blob(clone,target)
+                    with clone.transaction():
+                        clone.db.execute('UPDATE snapshot SET files=? WHERE id=?',(canonical(files),snapshot['id']))
+                        clone.db.execute('INSERT INTO native_player VALUES(?,?,?,?)',
+                            (snapshot['player'],cid,identity['character'],snapshot['id']))
                 pairs.append({'player': snapshot['player'], 'snapshot': snapshot['id'], 'files': files})
+            if bindings:
+                recovered_state=json.loads(selected['state'])
+                recovered_state['native_epoch']=recovery_epoch
+                recovered_state['native_player']=[dict(row) for row in clone.db.execute('SELECT * FROM native_player WHERE campaign=?',(cid,))]
+                clone.db.execute('UPDATE checkpoint SET state=? WHERE id=?',(canonical(recovered_state),checkpoint_id))
             record = {'campaign':cid, 'checkpoint':checkpoint_id, 'created':time.time(), 'players':pairs,
-                      'database_scope':'historical_checkpoint_domain_state', 'applied':False,
+                      'database_scope':'historical_checkpoint_domain_state', 'epoch':recovery_epoch, 'native_identity_rebranched':bool(bindings), 'applied':False,
                       'gameplay_verified':False, 'run_alongside_original':False,
                       'note':'Apply both save pairs and this campaign database together after closing both games and the server.'}
             (staging / 'RECOVERY.json').write_text(json.dumps(record,indent=2),encoding='utf-8')

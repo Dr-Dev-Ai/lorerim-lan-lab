@@ -1,4 +1,4 @@
-"""Small desktop front end for file backups. No game-control buttons are exposed."""
+"""Staged campaign backups and coordinated save requests."""
 import json
 import os
 import queue
@@ -17,16 +17,27 @@ def run(data_root):
     root.geometry('900x620')
     root.minsize(760, 500)
     state = {'campaign': None, 'players': [], 'busy': False}
+    bridge=None
+    from .api import Server
+    try:
+        bridge=Server(data_root,10579)
+        threading.Thread(target=bridge.serve_forever,daemon=True).start()
+    except OSError:
+        # An independently started bridge may own this port; do not replace it.
+        pass
     results = queue.Queue()
     data_root = Path(data_root)
     title = ttk.Frame(root, padding=18); title.pack(fill='x')
     ttk.Label(title, text='LoreRim Campaign Manager', font=('Segoe UI', 19, 'bold')).pack(anchor='w')
-    ttk.Label(title, text='File backups and campaign records • Skyrim integration is not connected', foreground='#a04b00').pack(anchor='w', pady=(5, 0))
+    ttk.Label(title, text='Staged campaign tools • matching game update and enrollment required', foreground='#a04b00').pack(anchor='w', pady=(5, 0))
     selection = ttk.Frame(root, padding=(18, 0, 18, 10)); selection.pack(fill='x')
     ttk.Label(selection, text='Campaign').pack(side='left')
     campaign_box = ttk.Combobox(selection, state='readonly', width=50); campaign_box.pack(side='left', padx=10)
     ttk.Label(selection, text='Player').pack(side='left')
     player_box = ttk.Combobox(selection, state='readonly', width=24); player_box.pack(side='left', padx=10)
+    managed_capture=tk.BooleanVar(value=False)
+    managed_controls=ttk.Frame(root,padding=(18,0,18,8));managed_controls.pack(fill='x')
+    ttk.Checkbutton(managed_controls,text='Managed co-op save',variable=managed_capture).pack(anchor='w')
     actions = ttk.Frame(root, padding=(18, 0)); actions.pack(fill='x')
     details = tk.Text(root, wrap='word', padx=12, pady=12, font=('Segoe UI', 10), state='disabled')
     details.pack(fill='both', expand=True, padx=18, pady=12)
@@ -125,7 +136,11 @@ def run(data_root):
             manifest = pick_manifest()
             if manifest:
                 profile, runtime = manifest
-                worker(lambda store: capture(store, cid, pid, save, profile, runtime, str(uuid.uuid4())))
+                capture_function=capture
+                if managed_capture.get():
+                    from .admission import capture_native
+                    capture_function=capture_native
+                worker(lambda store: capture_function(store,cid,pid,save,profile,runtime,str(uuid.uuid4())))
         except Exception as error:
             messagebox.showerror('Cannot capture save', str(error))
 
@@ -142,6 +157,20 @@ def run(data_root):
             for row in rows: latest.setdefault(row['player'], row['id'])
             return checkpoint(store, cid, campaign['leader'], list(latest.values()), label, str(uuid.uuid4()))
         worker(task)
+
+    def coop_save():
+        try:
+            if bridge is None:
+                raise ValueError('Another campaign service is already running. Use its save controls, or close it and reopen this manager.')
+            cid,pid=state['campaign'],current_player()
+            label=simpledialog.askstring('Save co-op campaign','Checkpoint name:')
+            if not label:return
+            def task(store):
+                from . import coopsave
+                return coopsave.request(store,cid,pid,label,str(uuid.uuid4()))
+            worker(task)
+        except Exception as error:
+            messagebox.showerror('Cannot request co-op save',str(error))
 
     def export():
         cid = state['campaign']
@@ -170,6 +199,7 @@ def run(data_root):
 
     recovery_actions = ttk.Frame(root, padding=(18, 0))
     recovery_actions.pack(before=details, fill='x')
+    ttk.Button(recovery_actions, text='Save co-op campaign',command=coop_save).pack(side='left',padx=(0,8))
     ttk.Button(recovery_actions, text='Prepare paired recovery copy', command=recovery).pack(side='left')
     ttk.Label(recovery_actions, text='Restores checkpoint records into a new folder; installation remains separate.').pack(side='left', padx=10)
 
@@ -194,6 +224,8 @@ def run(data_root):
     def closing():
         if state['busy']:
             messagebox.showinfo('Operation in progress', 'Wait for the current backup or database operation to finish.'); return
+        if bridge:
+            bridge.shutdown();bridge.server_close()
         root.destroy()
     root.protocol('WM_DELETE_WINDOW', closing)
     refresh(); poll(); root.mainloop()

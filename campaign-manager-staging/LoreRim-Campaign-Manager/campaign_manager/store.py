@@ -55,6 +55,11 @@ class Store:
           player TEXT NOT NULL REFERENCES player(id), expires REAL NOT NULL,
           state TEXT NOT NULL);
         CREATE UNIQUE INDEX IF NOT EXISTS presence_active ON presence_session(player) WHERE state='active';
+        CREATE TABLE IF NOT EXISTS native_epoch(
+          campaign TEXT PRIMARY KEY REFERENCES campaign(id), epoch TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS native_player(
+          player TEXT PRIMARY KEY REFERENCES player(id), campaign TEXT NOT NULL REFERENCES campaign(id),
+          character TEXT NOT NULL, snapshot TEXT NOT NULL REFERENCES snapshot(id), UNIQUE(campaign,character));
         CREATE TABLE IF NOT EXISTS follower(
           campaign TEXT NOT NULL REFERENCES campaign(id), actor TEXT NOT NULL,
           owner TEXT NOT NULL REFERENCES player(id), state TEXT NOT NULL, parked INTEGER NOT NULL,
@@ -92,7 +97,11 @@ class Store:
           sequence INTEGER PRIMARY KEY AUTOINCREMENT, campaign TEXT NOT NULL REFERENCES campaign(id),
           revision INTEGER NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, created REAL NOT NULL);
         ''')
+        from .coopsave import initialize
+        initialize(self.db)
         self.db.execute(f'PRAGMA user_version={SCHEMA}')
+        for row in self.db.execute('SELECT id FROM campaign').fetchall():
+            self.db.execute('INSERT OR IGNORE INTO native_epoch VALUES(?,?)',(row['id'],str(uuid.uuid4())))
 
     def close(self):
         self.db.close()
@@ -143,6 +152,8 @@ class Store:
                 if old['request'] != request:
                     raise Conflict('Operation ID was already used for a different request')
                 return json.loads(old['result'])
+            if kind!='presence' and self.db.execute("SELECT 1 FROM coop_request WHERE campaign=? AND state='saving' LIMIT 1",(cid,)).fetchone():
+                raise Conflict('Campaign is sealed while paired saves are captured')
             result = action()
             self.db.execute('INSERT INTO operation VALUES(?,?,?,?)', (cid, operation, request, canonical(result)))
             return result
@@ -153,6 +164,7 @@ class Store:
         cid = str(uuid.uuid4())
         with self.transaction():
             self.db.execute('INSERT INTO campaign(id,name,manifest) VALUES(?,?,?)', (cid, name.strip(), canonical(manifest)))
+            self.db.execute('INSERT INTO native_epoch VALUES(?,?)',(cid,str(uuid.uuid4())))
         return self.campaign(cid)
 
     def add_player(self, cid, name, as_leader=False):
@@ -186,7 +198,7 @@ class Store:
             self.db.execute("UPDATE follower SET parked=? WHERE campaign=? AND owner=? AND state!='dead'", (int(not online), cid, pid))
             if not online:
                 self.db.execute('UPDATE lease SET expires=0 WHERE campaign=? AND player=?', (cid, pid))
-            return {'revision': self.event(cid, 'presence', {'player': pid, 'online': online})}
+            return {'revision': self.event(cid, 'presence', {'player': pid, 'online': online},advance=False)}
         return self.mutate(cid, operation, 'presence', [pid, bool(online)], apply)
 
     def _presence(self, cid, pid, online):
@@ -194,7 +206,7 @@ class Store:
         self.db.execute("UPDATE follower SET parked=? WHERE campaign=? AND owner=? AND state!='dead'", (int(not online), cid, pid))
         if not online:
             self.db.execute('UPDATE lease SET expires=0 WHERE campaign=? AND player=?', (cid, pid))
-        self.event(cid, 'presence', {'player': pid, 'online': online})
+        self.event(cid, 'presence', {'player': pid, 'online': online},advance=False)
 
     def _expire_sessions(self, now):
         rows = self.db.execute("SELECT * FROM presence_session WHERE state='active' AND expires<=?", (now,)).fetchall()
@@ -207,7 +219,7 @@ class Store:
         with self.transaction():
             return self._expire_sessions(time.time())
 
-    def session(self, cid, pid, key, action):
+    def session(self, cid, pid, key, action, proof=None):
         if not isinstance(key, str) or not 16 <= len(key) <= 128 or not re.fullmatch(r'[A-Za-z0-9_-]+', key):
             raise ValueError('A connection-scoped session key is required')
         if action not in ('open', 'heartbeat', 'close'):
@@ -216,6 +228,10 @@ class Store:
             self.member(cid, pid)
             now = time.time()
             self._expire_sessions(now)
+            admission = None
+            if action == 'open' and proof is not None:
+                from .admission import check
+                admission = check(self,cid,pid,proof)
             row = self.db.execute('SELECT * FROM presence_session WHERE session=?', (key,)).fetchone()
             if row and (row['campaign'] != cid or row['player'] != pid):
                 raise Denied('Session belongs to another player')
@@ -238,7 +254,20 @@ class Store:
                 self._presence(cid,pid,True)
             else:
                 self.db.execute('UPDATE presence_session SET expires=? WHERE session=?', (now+45,key))
-            return {'attached': True, 'expires': now+45, 'revision': self.campaign(cid)['revision']}
+            campaign=self.campaign(cid)
+            result = {'attached':True,'expires':now+45,'revision':campaign['revision'],
+                      'epoch':self.one('SELECT epoch FROM native_epoch WHERE campaign=?',(cid,))['epoch'],'checkpoint':campaign['head'] or ''}
+            if admission: result.update(admission)
+            return result
+
+    def mark_native_world_changed(self,cid,pid,operation):
+        def apply():
+            self.member(cid,pid)
+            campaign=self.campaign(cid)
+            epoch=self.one('SELECT epoch FROM native_epoch WHERE campaign=?',(cid,))['epoch']
+            revision=self.event(cid,'native_world_changed',{'head':campaign['head'],'player':pid})
+            return {'recorded':True,'epoch':epoch,'checkpoint':campaign['head'] or '', 'revision':revision}
+        return self.mutate(cid,operation,'native_world_changed',[pid],apply)
 
     def register_follower(self, cid, pid, actor, metadata, operation):
         actor = form_key(actor)
@@ -291,7 +320,7 @@ class Store:
                     raise Denied('Claim the follower before changing its state')
                 self.db.execute('INSERT INTO follower(campaign,actor,owner,state,parked,metadata) VALUES(?,?,?,?,?,?)',
                                 (cid, actor, pid, 'waiting' if state == 'seen_waiting' else 'following', 0, canonical({'adapter': 'sff'})))
-                self.event(cid, 'follower_registered', {'actor': actor, 'owner': pid})
+                self.event(cid, 'follower_observed' if state in ('seen','seen_waiting') else 'follower_registered', {'actor': actor, 'owner': pid},advance=state not in ('seen','seen_waiting'))
             else:
                 if row['owner'] != pid:
                     raise Denied('This follower belongs to another player')
@@ -475,9 +504,10 @@ class Store:
 
     def domain_state(self, cid):
         result = {'campaign': self.campaign(cid)}
-        for table in ('player', 'follower', 'artifact', 'item', 'npc_rule'):
+        for table in ('player', 'follower', 'artifact', 'item', 'npc_rule', 'native_player'):
             columns = 'id,name' if table == 'player' else '*'
             result[table] = [dict(row) for row in self.db.execute(f'SELECT {columns} FROM {table} WHERE campaign=?', (cid,))]
+        result['native_epoch']=self.one('SELECT epoch FROM native_epoch WHERE campaign=?',(cid,))['epoch']
         return result
 
     def summary(self, cid):
@@ -485,5 +515,7 @@ class Store:
         for key, table in [('players','player'), ('followers','follower'), ('items','item'), ('transfers','transfer'), ('checkpoints','checkpoint')]:
             columns = 'id,name,online' if table == 'player' else '*'
             result[key] = [dict(row) for row in self.db.execute(f'SELECT {columns} FROM {table} WHERE campaign=?', (cid,))]
+        result['native_epoch']=self.one('SELECT epoch FROM native_epoch WHERE campaign=?',(cid,))['epoch']
+        result['native_players']=[dict(row) for row in self.db.execute('SELECT player,character,snapshot FROM native_player WHERE campaign=?',(cid,))]
         result['game_integration'] = False
         return result

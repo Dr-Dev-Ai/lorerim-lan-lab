@@ -88,19 +88,21 @@ Routes: `/v1/me`, `/v1/session/open`, `/v1/session/heartbeat`, `/v1/session/clos
 
 Operations that mutate campaign state require an `operation` field; follower state and transfers require expected versions. Acquire returns an opaque lease token and generation. Unknown NPCs default to the leader, not an unrestricted service NPC. Native adapters must provide trusted recruitment/actor classification and game-side mutation evidence: the API cannot prove an actor was recruited, an item removed or an item added merely because it received JSON.
 
-## Native integration release gates
+## Native integration status
 
-See `BRIDGE_CONTRACT.md`. Existing experimental native fixes remain separate and uninstalled. Still required:
+See `NATIVE_STAGE_STATUS.md` for the current candidate and remaining release gates.
+The matching staged client, server and SKSE companion now implement strict save admission,
+SFF ownership/parking policies and a coordinated paired-save protocol. These are unverified
+in Skyrim. Per-topic dialogue permissions, complete item-instance enforcement and custom
+follower paths remain incomplete.
 
-- per-save stable character identity and a reconnect lineage barrier (initial transport/credential attachment builds and passes an isolated network test);
-- remaining command/inventory/framework hooks and per-topic classification (initial activation/dialogue gates are compiled but unverified in gameplay);
-- trusted follower-framework observations and adapters (SFF first; custom followers individually);
-- stable mapping for generated references and complete per-instance item metadata;
-- all supported inventory/storage paths and idempotent game-side receipt/recovery;
-- validated capture at safe game points, remote capture agent, paired ledger/save restore and reconnect barrier;
-- two-player testing, rollback/crash tests in Skyrim and per-mod compatibility verification.
-
-Until those gates pass, running this program will NOT stop your girlfriend interacting with your follower, prevent actual game dupes or park an NPC. It records and tests the persistence/permission model for the bridge to enforce.
+After approved installation and native save enrollment, run the loopback adapter with
+`serve` or open the GUI (which owns its adapter while the window remains open). A leader
+can request `coop-save --credential leader.json --label "Before dungeon" --operation UUID`.
+Both connected clients must close conversations/trade/crafting and remain paused through
+capture. Pick up shared ground drops first. `coop-status --credential leader.json` reports
+progress; `coop-abort --credential leader.json --proposal UUID` cancels an unfinished request.
+Live game integration still needs two-client verification before this workflow is released.
 
 ## Validation
 
@@ -121,7 +123,7 @@ seconds, including when idle; expiry parks follower records and invalidates NPC
 leases. Native authority expires earlier and invalidates the client's interaction
 cache. Closed session tombstones reject delayed attach jobs, and stale close calls
 cannot close a new connection. Heartbeats do not advance campaign revision.
-Database parking remains distinct from actual NPC parking, which is pending.
+Native standard-SFF parking policies are staged; actual NPC behavior still requires in-game verification.
 
 The SFF adapter now stages standard command guards and existing-alias reporting;
 see `../campaign_followers/README.md`. Custom followers and hotkeys remain pending.

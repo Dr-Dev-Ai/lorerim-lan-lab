@@ -1,32 +1,35 @@
-# Native campaign candidate v0.3 — incomplete, not ready to apply
+# Native campaign candidate v0.5 — startup crash; rolled back
 
-Build identity: `lorerim-campaign-bridge-v0.3-staged`.
+Both installed 1.6.1170 clients failed startup during Papyrus VM initialization on October 23. The launcher initially rejected 1170; correcting that gate exposed the crash. Host CrashLogger reports an access violation at shadow-game address 0x180633CE1, with SKSE registration and VMInitThread in the stack. The root cause is not yet verified. Pre-update binaries, profile mod lists and the matching server were restored; saves were not restored or modified. The development build is retained for repair.
 
-New development completed in this revision:
+Build identity: `lorerim-campaign-bridge-v0.5-staged`. Development remains separate from installed game/server files.
 
-- Standard SFF recruitment, preparation, wait, follow, dismiss and animal paths now stage ownership guards before actor mutation. The patcher preserves the installed extended-alias script and refuses obsolete/unexpected source. Recruitment capacity checks precede new ownership claims.
-- Existing primary, extra and animal aliases report through the native transport. Initial waiting aliases remain waiting; repeated observations never revive recorded dead followers or replace another player's ownership.
-- New integer Papyrus/native bridge preserves complete FormIDs and uses bounded asynchronous requests. Commands awaiting permission cancel if the connection drops. Native dialogue and follower responses have separate correlation handling.
-- Connection-scoped session leases renew every ten seconds. The API sweeps idle orphaned sessions after 45 seconds, parks database follower records and expires NPC leases. Native authority expires earlier and invalidates client interaction caches. Closed-session tombstones reject delayed attach; stale close calls cannot close a replacement session. Concurrent credential use is rejected.
-- Paired historical recovery now prepares both save pairs and a database rebuilt from the same checkpoint domain state. It omits later transfers, sessions and leases, verifies all copied content, preserves credential hashes and leaves originals untouched. CLI and GUI expose this separate recovery-copy operation. It does not apply to game profiles.
+## Implemented and built
 
-Validation:
+- SKSE serialization companion owns one bounded character/campaign/epoch/checkpoint identity record. Preload invalidates native admission before world replication; record parsing rejects duplicate, malformed and foreign-epoch records. Foreign plugin records are preserved by recovery-copy rewrites.
+- Admission requires the exact enrolled `.ess/.skse` pair, character, campaign epoch, lineage and compatible archived profile. Normal gameplay transport and auto-party publication wait for admission. Detected inventory, quest or progression changes after loading offline prevent admission. Unknown mod external state is not certified.
+- Durable batched world-dirty markers invalidate stale reconnect saves. Presence heartbeats remain ephemeral. Campaign session state refreshes the companion's checkpoint/revision.
+- Standard SFF guards and alias reporting preserve immutable recruiter ownership and terminal death. Native ownership reconciliation sends epoch/sequence checked parking, follow and wait policies to the current simulator. Papyrus applies waiting state without cloning, teleporting or resurrection. Custom followers and direct hotkeys remain unsupported.
+- Coordinated checkpoint request pauses both peers, drains pending changes, checks profile hashes, freezes the server calendar and seals one revision. Both peers request fresh game saves and stream paired files through the authenticated native relay. The manager commits both verified pairs and the matching domain records atomically. Failures preserve the previous checkpoint. Shared ground drops must be picked up before capture; they have no durable cross-session reconstruction yet.
+- Chunk uploads are ordered, hash-verified and retry-safe, including a crash between append/fsync and journal commit. Missing pairs and mismatched embedded identities cannot commit. Pending transfers block capture/reconnect.
+- CLI `coop-save`, `coop-status`, `coop-abort`; GUI save request and window-owned loopback adapter. Generated native INI remains disabled and private. Historical recovery prepares new paired files and a new epoch in a separate folder.
 
-- Matching Windows client launcher, server DLL/runner and standalone protocol probe build successfully.
-- Native protocol suite: 204 assertions across 11 cases passed.
-- Isolated real native transport -> server -> API: disabled guard rejected; valid fixed-leader credential accepted; invalid credential rejected; longer attached connection completed and a native heartbeat renewal was observed. No Skyrim process was used.
-- Python manager: 43 tests passed on Linux; 42 passed on Windows with the symlink privilege test skipped. Includes historical domain rewind, paired file preservation, corruption rejection, ownership conflicts, terminal follower death, lease expiry, duplicate sessions, stale close and attach-after-close rejection.
-- Generated extended SFF script, LoreRimLANRest and updated player-alias script compile with zero errors/warnings. Generated sources/PEX stay private on the PC, outside installed mods.
-- The earlier host save pair remains backed up; no partner pair or two-player gameplay validation exists. Terra is offline.
+## Verification
 
-Still incomplete:
+- Windows server runner/DLL and client launcher compile with matching build identity.
+- Native protocol: 225 assertions in 13 cases pass.
+- Companion DLL mock-SKSE lifecycle/ABI probe passes serialization, preload invalidation, epoch validation, malformed/duplicate rejection and legacy initialization checks.
+- Python persistence: 63 tests pass on Linux; Windows runs 63 with one symlink privilege skip.
+- Native admission probe: 10 cases pass, including absent/invalid proof, wrong character/epoch/save, pre-admission packet fence and heartbeat renewal.
+- Two synthetic native peers exercise the actual server coordinator/API relay: two save snapshots/four verified files commit together and both peers receive committed resume. Synthetic fixtures are not Skyrim saves validated by the game.
+- Existing SFF/parking Papyrus scripts compile with zero errors/warnings in the private build workspace.
 
-- Actual game-side follower parking/resume, AI ownership reconciliation, direct hotkey paths and custom follower frameworks. Database parking is not actual NPC parking.
-- Per-save character identity and a reconnect lineage barrier before world synchronization. A configured credential alone does not identify the loaded character or safe branch.
-- Native item-instance identity, durable game-side transfer receipts and recovery across every inventory/storage/drop path. The database item journal is not complete in-game duplication protection.
-- Per-topic authority for NPCs offering mixed quest/service dialogue. A service NPC classification can currently permit locally executed quest fragments; a server quest-update restriction cannot undo them.
-- Remote save capture/transport, certified safe capture points, approved deployment and live paired save/database restoration.
-- Two-player regression tests and crash/reconnect tests in Skyrim. Existing staged sawmill late-entry/prop visibility, cross-session dropped-item reconciliation and blur/magicka diagnosis are also unresolved.
-- Arbitrary offline quest/world merging remains unsupported.
+## Still required
 
-All engine behavior remains source-only under the existing experimental authorization; no IDA/Ghidra verification ran. Do not install this as a complete campaign-persistence fix. No installed executable, mod, save or server configuration was replaced.
+- In-game verification of the save request ABI, pause behavior, completed save timing and both-client reload/reconnect. Source-only engine assumptions remain unverified by IDA/Ghidra under the existing experimental authorization. Compilation and protocol probes are not gameplay validation.
+- Per-topic NPC authority for mixed service/quest dialogue; custom follower/framework/hotkey coverage and missed-death reconciliation.
+- Native durable per-item identities/receipts and all inventory/storage paths. The database artifact journal alone does not enforce one-of-a-kind items in Skyrim.
+- Sawmill prop enable/disable and late-entry synchronization; actual blur/magicka diagnosis; two-client rental/rest/equipment/drop regression tests.
+- Arbitrary offline quest/world merges remain unsupported. This candidate does not import arbitrary solo progress.
+
+No installed executable, mod, save or server configuration was replaced. Do not present this candidate as the complete requested fix.

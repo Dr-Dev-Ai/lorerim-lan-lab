@@ -12,3 +12,17 @@ work/
 mods/
 profiles/
 Stock Game/
+
+/applied-update-backups/
+/campaign-manager-data/
+/campaign-manager-staged.zip.b64
+/pending-update-build/
+/pending-update-source/
+/campaign-manager-staging/native-bridge-smoke-*/
+*.b64
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+credentials/
+blobs/
+native-uploads/

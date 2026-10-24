@@ -13,10 +13,14 @@ def main():
     p = sub.add_parser('fingerprint'); p.add_argument('--build', required=True); p.add_argument('--file', action='append', required=True); p.add_argument('--output', required=True)
     p = sub.add_parser('init'); p.add_argument('--name', required=True); p.add_argument('--profile', required=True); p.add_argument('--runtime', required=True)
     p = sub.add_parser('add-player'); p.add_argument('--campaign', required=True); p.add_argument('--name', required=True); p.add_argument('--leader', action='store_true'); p.add_argument('--credential-out', required=True)
-    p = sub.add_parser('capture'); p.add_argument('--credential', required=True); p.add_argument('--save', required=True); p.add_argument('--profile', required=True); p.add_argument('--runtime', required=True); p.add_argument('--extra', action='append', default=[]); p.add_argument('--operation', required=True)
+    p = sub.add_parser('capture'); p.add_argument('--credential', required=True); p.add_argument('--save', required=True); p.add_argument('--managed', action='store_true'); p.add_argument('--profile', required=True); p.add_argument('--runtime', required=True); p.add_argument('--extra', action='append', default=[]); p.add_argument('--operation', required=True)
     p = sub.add_parser('checkpoint'); p.add_argument('--credential', required=True); p.add_argument('--snapshot', action='append', required=True); p.add_argument('--label', required=True); p.add_argument('--operation', required=True)
     p = sub.add_parser('export'); p.add_argument('--credential', required=True); p.add_argument('--checkpoint', required=True); p.add_argument('--output', required=True)
     p = sub.add_parser('recover'); p.add_argument('--credential', required=True); p.add_argument('--checkpoint', required=True); p.add_argument('--output', required=True)
+    p = sub.add_parser('native-config'); p.add_argument('--credential',required=True); p.add_argument('--save-directory',required=True); p.add_argument('--output',required=True)
+    p = sub.add_parser('coop-save'); p.add_argument('--credential',required=True); p.add_argument('--label',required=True); p.add_argument('--operation',required=True)
+    p = sub.add_parser('coop-status'); p.add_argument('--credential',required=True)
+    p = sub.add_parser('coop-abort'); p.add_argument('--credential',required=True); p.add_argument('--proposal',required=True)
     p = sub.add_parser('status'); p.add_argument('--campaign', required=True)
     p = sub.add_parser('serve'); p.add_argument('--port', type=int, default=10579)
     sub.add_parser('gui')
@@ -60,8 +64,20 @@ def main():
             credentials = json.loads(Path(args.credential).read_text(encoding='utf-8-sig'))
             actor = store.authenticate(credentials['token'])
             cid, pid = actor['campaign'], actor['id']
-            if args.command == 'capture':
-                result = capture(store, cid, pid, args.save, args.profile,
+            if args.command in ('coop-save','coop-status','coop-abort'):
+                from . import coopsave
+                if args.command=='coop-save': result=coopsave.request(store,cid,pid,args.label,args.operation)
+                elif args.command=='coop-status': result=coopsave.status(store,cid,pid)
+                else: result=coopsave.abort(store,cid,pid,args.proposal,'Cancelled by campaign leader')
+            elif args.command == 'native-config':
+                from .configuration import write_native_config
+                result=write_native_config(store,cid,pid,credentials['token'],args.save_directory,args.output)
+            elif args.command == 'capture':
+                capture_function=capture
+                if args.managed:
+                    from .admission import capture_native
+                    capture_function=capture_native
+                result = capture_function(store, cid, pid, args.save, args.profile,
                                  json.loads(Path(args.runtime).read_text(encoding='utf-8-sig')), args.operation, extras=args.extra)
             elif args.command == 'checkpoint':
                 result = checkpoint(store, cid, pid, args.snapshot, args.label, args.operation)

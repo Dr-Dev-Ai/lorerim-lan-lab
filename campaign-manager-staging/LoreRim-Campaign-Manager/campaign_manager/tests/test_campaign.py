@@ -321,7 +321,7 @@ class CampaignTest(unittest.TestCase):
         with self.assertRaises(Conflict):checkpoints.checkpoint(self.store,self.cid,self.a,[a['id'],b['id']],'stale',self.op())
     def test_snapshot_becomes_stale_after_campaign_mutation(self):
         a=self.capture(self.a);b=self.capture(self.b)
-        self.present(self.a)
+        self.store.mark_native_world_changed(self.cid,self.a,self.op())
         with self.assertRaises(Conflict):checkpoints.checkpoint(self.store,self.cid,self.a,[a['id'],b['id']],'stale',self.op())
     def test_checkpoint_rejects_pending_transfers(self):
         item=self.item(); self.store.prepare_transfer(self.cid,self.a,item['id'],'player:'+self.b,1,self.op())

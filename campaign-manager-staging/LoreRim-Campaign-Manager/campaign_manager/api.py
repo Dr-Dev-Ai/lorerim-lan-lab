@@ -11,16 +11,33 @@ def dispatch(store, actor, route, body):
     cid, pid = actor['campaign'], actor['id']
     # Campaign/player IDs are always taken from the credential, never trusted from JSON.
     op = body.get('operation', '')
+    if route.startswith('/v1/coopsave/'):
+        from . import coopsave
+        action=route.rsplit('/',1)[1]
+        if action=='status':return coopsave.status(store,cid,pid,body.get('proposal'))
+        if action=='prepare':return coopsave.request(store,cid,pid,body.get('label','Co-op save'),op)
+        if action=='ready':return coopsave.ready(store,cid,pid,body['proposal'],body['profile'])
+        if action=='seal':return coopsave.seal(store,cid,pid,body['proposal'])
+        if action=='upload':return coopsave.upload(store,cid,pid,body['proposal'],body['kind'],body['offset'],body['total'],body['sha256'],body['data'])
+        if action=='commit':return coopsave.commit(store,cid,pid,body['proposal'])
+        if action=='abort':return coopsave.abort(store,cid,pid,body['proposal'],body.get('reason','Checkpoint cancelled'))
+        raise ValueError('Unknown checkpoint action')
     if route == '/v1/me':
         return {'player': pid, 'campaign': cid, 'is_leader': store.campaign(cid)['leader'] == pid}
     if route == '/v1/state':
         return store.summary(cid)
     if route in ('/v1/session/open', '/v1/session/heartbeat', '/v1/session/close'):
-        return store.session(cid, pid, body['session'], route.rsplit('/', 1)[1])
+        action=route.rsplit('/',1)[1]
+        if action=='open' and not isinstance(body.get('proof'),dict):raise Denied('Native save proof is required before admission')
+        return store.session(cid,pid,body['session'],action,body.get('proof'))
+    if route == '/v1/world/dirty':
+        return store.mark_native_world_changed(cid,pid,op)
     if route == '/v1/presence':
         if type(body.get('online')) is not bool:
             raise ValueError('online must be a boolean')
         return store.set_presence(cid, pid, body['online'], op)
+    if route == '/v1/followers/policies':
+        return {'followers': [dict(row) for row in store.db.execute('SELECT * FROM follower WHERE campaign=?', (cid,))]}
     if route == '/v1/followers/observe':
         return store.observe_follower(cid, pid, body['actor'], body['state'], op)
     if route == '/v1/followers/register':
@@ -126,6 +143,8 @@ class Server(ThreadingHTTPServer):
         store = Store(self.data_root)
         try:
             store.expire_sessions()
+            from .coopsave import expire
+            expire(store)
         finally:
             store.close()
 

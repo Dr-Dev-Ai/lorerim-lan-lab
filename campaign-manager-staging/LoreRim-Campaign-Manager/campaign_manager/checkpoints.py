@@ -177,13 +177,22 @@ def checkpoint(store, cid, leader, snapshot_ids, label, operation):
             raise Conflict('Exactly one snapshot per campaign player is required (at least two players)')
         if store.db.execute("SELECT id FROM transfer WHERE campaign=? AND state='pending'", (cid,)).fetchone():
             raise Conflict('Resolve pending item transfers before checkpointing')
+        bindings={row['player']:dict(row) for row in store.db.execute('SELECT * FROM native_player WHERE campaign=?',(cid,))}
+        if bindings and set(bindings)!=players:raise Conflict('Every campaign player must enroll a native save before pairing managed captures')
         seen = set()
         for sid in ids:
             row = store.one('SELECT * FROM snapshot WHERE id=? AND campaign=?', (sid, cid))
             if row['player'] in seen or row['revision'] != current['revision'] or row['parent'] != current['head'] or row['manifest'] != current['manifest']:
                 raise Conflict('Snapshots do not share the current campaign revision, lineage and manifest')
             seen.add(row['player'])
-            verify_snapshot(store, row)
+            files=verify_snapshot(store,row)
+            if bindings:
+                from .cosave import read_identity
+                identity=read_identity(blob_path(store,files['save/character.skse']['sha256']))
+                epoch=store.one('SELECT epoch FROM native_epoch WHERE campaign=?',(cid,))['epoch']
+                if (identity['character']!=bindings[row['player']]['character'] or identity['campaign']!=cid
+                    or identity['epoch']!=epoch or identity['checkpoint']!=(current['head'] or '') or identity['revision']!=row['revision']):
+                    raise Conflict('Native character identity, epoch or lineage differs between paired captures')
         if seen != players:
             raise Conflict('Snapshot player set differs from campaign membership')
         kid = str(uuid.uuid4())

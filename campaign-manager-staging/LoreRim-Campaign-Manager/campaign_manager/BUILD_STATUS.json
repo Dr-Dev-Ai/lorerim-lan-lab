@@ -1,0 +1,37 @@
+{
+  "version": "0.5.0",
+  "status": "BLOCKED_NATIVE_STARTUP_CRASH_ROLLED_BACK",
+  "ready_to_apply": false,
+  "game_integration": false,
+  "deployment_authorized": false,
+  "validation": {
+    "python": "3.12.14",
+    "unit_tests": 63,
+    "unit_result": "LINUX_63_PASS; WINDOWS_62_PASS_1_PRIVILEGE_SKIP",
+    "cli_end_to_end": "PASS_WITH_SYNTHETIC_FIXTURES",
+    "source_compile": "PASS",
+    "windows_gui_runtime": "PREVIOUS_STARTUP_LAYOUT_SMOKE; NEW_COORDINATED_SAVE_CONTROLS_NOT_VISUALLY_TESTED",
+    "native_gameplay": "FAIL_STARTUP_BOTH_1170_CLIENTS_PAPYRUS_VM_INIT",
+    "native_client_build": "PASS",
+    "native_server_build": "PASS",
+    "native_protocol_tests": "PASS_225_ASSERTIONS_13_CASES",
+    "host_save_backup": "CAPTURED_AND_HASH_VERIFIED_ORIGINALS_UNCHANGED",
+    "native_runner_build": "PASS_MATCHING_RUNNER_REQUIRED",
+    "native_transport_api_smoke": "PASS_10_ADMISSION_CASES_WITH_NATIVE_HEARTBEAT",
+    "papyrus_follower_adapter": "THREE_SCRIPTS_COMPILE_ZERO_ERRORS_WARNINGS",
+    "historical_recovery": "VERIFIED_SAVE_PAIRS_AND_CHECKPOINT_DOMAIN_DATABASE_IN_NEW_DIRECTORY",
+    "native_checkpoint_relay": "PASS_TWO_SYNTHETIC_NATIVE_PEERS_FOUR_VERIFIED_FILES_ATOMIC_PAIR_COMMIT_AND_RESUME",
+    "native_cosave_companion": "PASS_MOCK_SKSE_ABI_SERIALIZATION_AND_LIFECYCLE",
+    "runtime_version_gate": "1170_ADDED_AFTER_DEPLOYMENT_REJECTION"
+  },
+  "not_implemented": [
+    "Direct hotkey and custom follower-framework adapters",
+    "Complete native item identity, receipts and all storage/drop recovery",
+    "Per-topic classification for mixed quest/service dialogue",
+    "Approved live paired restoration and two-client Skyrim acceptance tests",
+    "Remaining animation/prop reconciliation and live blur/magicka diagnosis",
+    "Arbitrary offline quest/world merge (unsupported)"
+  ],
+  "remaining_limitations_file": "NATIVE_STAGE_STATUS.md",
+  "not_ready_because": "Both 1170 clients crash during Papyrus VM initialization after the version gate fix; verified pre-update binaries and profiles were restored."
+}
