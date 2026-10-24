@@ -6,7 +6,7 @@ Upstream: https://github.com/tiltedphoques/TiltedEvolution.git
 
 Exact upstream base: `5a72cdcd17b998fb1462bb5c6fb0d60d29b98de9`
 
-Full Windows development commit: `ee529b22a684aef20268061b44afcddb14c3ea5a`
+Full Windows development commit: `18db4ab390330cecb34c22e9c45e7ac45fe035a8`
 
 ## Reconstruct the native worktree
 
@@ -19,6 +19,6 @@ Full Windows development commit: `ee529b22a684aef20268061b44afcddb14c3ea5a`
 
 The patch excludes compiled PEX files and private decompiled third-party scripts. It does not contain game assets, saves, credentials, private dependency sources, runtime databases or executables. The local Windows worktree retains those private build inputs for authorized inspection. Static Skill Leveling and rental overrides must be recreated with minimal source-preserving patchers against the user's installed version; do not distribute decompiled scripts.
 
-The Python manager is also available under ../campaign-manager-staging/LoreRim-Campaign-Manager/campaign_manager/. Run its tests with that parent directory on PYTHONPATH. Host 1170 startup, save loading, connection, party sleep and repeated single-item pickup have passed local checks. Unpartied sleep, the remaining magicka regeneration penalty and two-client acceptance remain unresolved. The newly installed connected-menu candidate still needs gameplay and manual-save/reload checks.
+The Python manager is also available under ../campaign-manager-staging/LoreRim-Campaign-Manager/campaign_manager/. Run its tests with that parent directory on PYTHONPATH. Host 1170 startup, save loading, connection, party sleep and repeated single-item pickup have passed local checks. Unpartied sleep, the remaining magicka regeneration penalty and two-client acceptance remain unresolved. The connected-menu candidate passed host Map/Journal clock progression, a new manual save/reload, first/third-person map checks and local-map/camera/sound checks. Arbitrary custom menus, overwrite/quicksave and two-client/checkpoint regressions remain untested.
 
 No automatic deployment is included. The host runs the experimental recovery candidate with reversible backups. Terra has not received this candidate. The historical patch filename is retained; SOURCE_MANIFEST.json identifies the current source commit.

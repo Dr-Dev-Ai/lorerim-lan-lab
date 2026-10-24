@@ -2,6 +2,35 @@
 
 ## Start here
 
+LATEST HOST MENU ACCEPTANCE (supersedes pending-menu notes below):
+Source package synchronized through18db4ab (acceptance docs); installed binary
+contains codeee529b2. New candidate/acceptance documentation does not change binaries.
+
+### Host menu acceptance completed, 23:35 local
+
+Installed menu candidate c77ffed2...96248f (native ee529b2) passed:
+- Map held open: five read-only samples across 8.003 real seconds; UI pause
+  count0 and VM inactive0 throughout; game hour14.2464066 ->14.2911301,
+  matching timescale20 (about161 game seconds in8 real seconds).
+- Journal held open: two samples with on-stack flagsF4C, pause count0 and VM
+  inactive0; game hour14.6174488 ->14.6285286 in2.001 real seconds.
+- New manual Save16 queued23:34:37.100; engine returned success23:34:37.965;
+  finished loading23:34:54.232. User confirmed new save/reload succeeded.
+- User confirmed first/third-person map open/close, local-map toggle, and
+  movement/camera/sound afterward were all normal.
+
+Latest progress is Save16 (Tamriel000428,20261024063437); ESS+SKSE copied and
+hash-verified under October23task work/menu-fix-candidate/accepted-new-save.
+Earlier Save15 backup remains. Live host10760 was not terminated or reverted.
+Evidence JSON and raw samples remain private under menu-fix-candidate.
+These are host checks. Arbitrary custom menus, overwrite/quicksave paths,
+paired-checkpoint regression and two-client synchronization remain untested.
+Intentional Loading/Main/Fader, active sleep/wait and paired-checkpoint pauses
+remain; ordinary connected menus use the expanded unpause policy.
+Unpartied sleep and the remaining magicka regeneration penalty are separate
+unresolved work. Do not mark all co-op acceptance complete.
+
+
 LATEST RUNTIME: menu candidate PID10760 loaded Save15 and connected to isolated
 10580 server at23:30:57. Journal Menu opened at23:31:12 and23:31:36; both logged
 flags F2D->F0C on main thread31812. Game remained running, VM inactive0, pause
