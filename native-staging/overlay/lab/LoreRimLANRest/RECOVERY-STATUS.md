@@ -1,3 +1,38 @@
+## Death / save-load guard candidate installed — October 24
+
+User reported death automatically loading a save while the multiplayer session
+remained connected. The isolated server on 10580 had bEnableDeathSystem=false;
+production on 10578 already had it true and was not changed or restarted.
+The isolated LoreRim profile already stops the competing Respawn quests through
+its compatibility AutoExec. Only this test server config now enables death mode;
+the generic lab generator is unchanged because its baseline handler setup differs.
+
+Native code 54c14cf adds connection-scoped respawn timer cleanup and restores
+essential protection if a delayed compatibility handler clears it. Existing
+engine accessors and the existing bleedout/respawn path are reused; no new engine
+offsets or hooks were introduced. Existing engine behavior remains assumed
+without IDA/Ghidra verification. A completed connected save load now closes the
+transport instead of revisiting the cell in the stale session. This post-load
+fallback does not roll back peers or make older saves consistent with the party.
+
+Client and matching PDB built successfully. Installed client SHA256:
+2ab06f8d549e4a9cf8c62603a3c9be0672537727f35fd924f77842cfb20a16c5.
+Wire identity remains lorerim-rest-recovery-v0.6; no server binary/protocol change.
+Save20 ESS + SKSE, previous client and old test config are hash-verified backups
+under the October23 task work/death-load-guard-candidate/before-install.
+Rollback manifest preserves the original binaries. Isolated server PID29888
+listens on 10580; new host launch requested through MO2 at 00:38.
+
+Runtime acceptance PENDING: load Save20 offline, connect 10580 blank password,
+confirm death mode enabled, then test ordinary lethal combat (not console kill).
+Expected: bleedout, roughly five-second delay, in-session respawn, no save load,
+connection retained, movement restored, repeatable death. Separately verify a
+manual connected load disconnects with the HUD explanation. Do not claim either
+test passed from compilation/startup alone. Preserve the pretest save.
+
+Earlier dashboard and menu host acceptance remain valid; two-client telemetry,
+unpartied sleep, residual magicka regeneration and broader co-op remain open.
+
 # 1170 startup and rest recovery, October 23, 2026
 
 Build identity: `lorerim-rest-recovery-v0.6`. Experimental; host sleep acceptance

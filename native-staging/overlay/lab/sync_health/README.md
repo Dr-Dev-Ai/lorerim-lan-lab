@@ -28,11 +28,12 @@ observe existing decisions without changing playback/correction behavior.
   after five seconds of settling. It does not compare calendar dates or prove
   that the server clock is correct. Paired checkpoints and transitions may
   legitimately change this estimate.
-- An online save load produces a sticky warning until reconnect. Normal LAN
-  load handling currently revisits the cell; it does not roll back the server
-  or peers to the save's inventory/quest state. Disconnect BEFORE loading and
+- An online save load is logged and now closes the connection at the completed
+  load event, with a HUD explanation. It does not roll back the server or peers
+  to the save's inventory/quest state. Disconnect BEFORE loading and
   use a save consistent with party progress before reconnecting. Campaign mode
-  additionally invalidates admission on load, but that is not universal repair.
+  additionally invalidates admission on load. The post-load disconnect is a
+  fallback boundary, not a transactional preload barrier or universal repair.
 
 Amber highlights timing/risk indicators, not a measured desync percentage.
 Server processing time and quest/inventory agreement are explicitly unmeasured.

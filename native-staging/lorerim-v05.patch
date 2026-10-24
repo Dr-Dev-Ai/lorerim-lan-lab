@@ -2074,7 +2074,7 @@ index aaea6a3..acbf2c6 100644
          bool updateTimestamp = false;
  
 diff --git a/Code/client/Services/Generic/DiscoveryService.cpp b/Code/client/Services/Generic/DiscoveryService.cpp
-index cea7919..3ab87cf 100644
+index cea7919..9c04554 100644
 --- a/Code/client/Services/Generic/DiscoveryService.cpp
 +++ b/Code/client/Services/Generic/DiscoveryService.cpp
 @@ -1,6 +1,8 @@
@@ -2111,14 +2111,21 @@ index cea7919..3ab87cf 100644
      }
  }
  
-@@ -296,6 +299,12 @@ void DiscoveryService::OnConnected(const ConnectedEvent& acEvent) noexcept
+@@ -296,6 +299,19 @@ void DiscoveryService::OnConnected(const ConnectedEvent& acEvent) noexcept
  
  BSTEventResult DiscoveryService::OnEvent(const TESLoadGameEvent*, const EventDispatcher<TESLoadGameEvent>*)
  {
 +    m_world.ctx().at<SyncHealthService>().NoteConnectedLoad();
-+    if (CampaignService::IsConfigured() && m_world.GetTransport().IsConnected())
++    if (m_world.GetTransport().IsConnected())
 +    {
-+        CampaignService::SuspendForLoad();
++        if (CampaignService::IsConfigured())
++            CampaignService::SuspendForLoad();
++        // A local save does not rewind the server or its other clients. Never
++        // refresh the restored actors into the old connection/ownership state.
++        spdlog::warn("Save-load guard: closing multiplayer connection after loading a local save");
++        m_world.GetTransport().Close();
++        ResetCachedCellData();
++        Utils::ShowHudMessage(String("Disconnected after loading a save. Reconnect only with a save matching party progress."));
 +        return BSTEventResult::kOk;
 +    }
      spdlog::info("Finished loading, triggering visit cell");
@@ -2734,6 +2741,90 @@ index 0000000..9276939
 +            s_displayQueue.push_back(cId);
 +    }
 +}
+diff --git a/Code/client/Services/Generic/PlayerService.cpp b/Code/client/Services/Generic/PlayerService.cpp
+index 6ced4d5..8c6813e 100644
+--- a/Code/client/Services/Generic/PlayerService.cpp
++++ b/Code/client/Services/Generic/PlayerService.cpp
+@@ -31,6 +31,7 @@
+ #include <AI/AIProcess.h>
+ #include <EquipManager.h>
+ #include <Forms/TESRace.h>
++#include <Forms/TESNPC.h>
+ 
+ PlayerService::PlayerService(World& aWorld, entt::dispatcher& aDispatcher, TransportService& aTransport) noexcept
+     : m_world(aWorld)
+@@ -75,6 +76,11 @@ void PlayerService::OnDisconnected(const DisconnectedEvent& acEvent) noexcept
+     m_serverDifficulty = m_previousDifficulty = 6;
+ 
+     ToggleDeathSystem(false);
++    m_respawnTimerStarted = false;
++    m_knockdownStart = false;
++    if (m_godmodeStart)
++        PlayerCharacter::SetGodMode(false);
++    m_godmodeStart = false;
+ 
+     TESGlobal* pKillMove = Cast<TESGlobal>(TESForm::GetById(0x100F19));
+     pKillMove->f = 1.f;
+@@ -195,25 +201,34 @@ void PlayerService::OnPartyLeftEvent(const PartyLeftEvent& acEvent) noexcept
+ 
+ void PlayerService::RunRespawnUpdates() noexcept
+ {
+-    if (!m_isDeathSystemEnabled)
++    if (!m_isDeathSystemEnabled || !m_transport.IsConnected())
+         return;
+ 
+-    static bool s_startTimer = false;
+-
+     PlayerCharacter* pPlayer = PlayerCharacter::Get();
++    if (!pPlayer)
++        return;
++    const auto* pBase = Cast<TESNPC>(pPlayer->baseForm);
++    if (!pPlayer->IsEssential() || (pBase && !pBase->actorData.IsEssential()))
++    {
++        // LoreRim's delayed AutoExec compatibility cleanup can clear this after
++        // connection. Essential protection is required for in-session bleedout.
++        pPlayer->SetPlayerRespawnMode(true);
++        spdlog::warn("Multiplayer death: restored respawn protection cleared by another handler");
++    }
+     if (!pPlayer->actorState.IsBleedingOut())
+     {
+         m_cachedMainSpellId = pPlayer->magicItems[0] ? pPlayer->magicItems[0]->formID : 0;
+         m_cachedSecondarySpellId = pPlayer->magicItems[1] ? pPlayer->magicItems[1]->formID : 0;
+         m_cachedPowerId = pPlayer->equippedShout ? pPlayer->equippedShout->formID : 0;
+ 
+-        s_startTimer = false;
++        m_respawnTimerStarted = false;
+         return;
+     }
+ 
+-    if (!s_startTimer)
++    if (!m_respawnTimerStarted)
+     {
+-        s_startTimer = true;
++        m_respawnTimerStarted = true;
++        spdlog::info("Multiplayer death: starting in-session respawn; no save reload requested");
+         m_respawnDeadline = std::chrono::steady_clock::now() + 5s;
+         FadeOutGame(true, true, 3.0f, true, 2.0f);
+ 
+@@ -229,10 +244,11 @@ void PlayerService::RunRespawnUpdates() noexcept
+     if (cNow >= m_respawnDeadline)
+     {
+         pPlayer->RespawnPlayer();
++        spdlog::info("Multiplayer death: respawn completed; notifying server");
+ 
+         m_transport.Send(PlayerRespawnRequest());
+ 
+-        s_startTimer = false;
++        m_respawnTimerStarted = false;
+ 
+         auto* pEquipManager = EquipManager::Get();
+         TESForm* pSpell = TESForm::GetById(m_cachedMainSpellId);
+@@ -348,4 +364,5 @@ void PlayerService::ToggleDeathSystem(bool aSet) noexcept
+     m_isDeathSystemEnabled = aSet;
+ 
+     PlayerCharacter::Get()->SetPlayerRespawnMode(aSet);
++    spdlog::info("Multiplayer death system {}", aSet ? "enabled" : "disabled");
+ }
 diff --git a/Code/client/Services/Generic/QuestService.cpp b/Code/client/Services/Generic/QuestService.cpp
 index ec897b1..6012c98 100644
 --- a/Code/client/Services/Generic/QuestService.cpp
@@ -3251,6 +3342,18 @@ index 0000000..63d7db1
 +    entt::scoped_connection m_updateConnection;
 +    entt::scoped_connection m_disconnectConnection;
 +};
+diff --git a/Code/client/Services/PlayerService.h b/Code/client/Services/PlayerService.h
+index 8ed51a8..177c40f 100644
+--- a/Code/client/Services/PlayerService.h
++++ b/Code/client/Services/PlayerService.h
+@@ -63,6 +63,7 @@ private:
+     int32_t m_previousDifficulty = 6;
+ 
+     bool m_isDeathSystemEnabled = true;
++    bool m_respawnTimerStarted = false;
+ 
+     bool m_knockdownStart = false;
+     std::chrono::steady_clock::time_point m_knockdownDeadline;
 diff --git a/Code/client/Services/SyncHealthService.h b/Code/client/Services/SyncHealthService.h
 new file mode 100644
 index 0000000..b12ab06
@@ -6013,10 +6116,45 @@ index 0000000..acd7001
 +}
 diff --git a/lab/LoreRimLANRest/RECOVERY-STATUS.md b/lab/LoreRimLANRest/RECOVERY-STATUS.md
 new file mode 100644
-index 0000000..41ec4f7
+index 0000000..8af59b9
 --- /dev/null
 +++ b/lab/LoreRimLANRest/RECOVERY-STATUS.md
-@@ -0,0 +1,317 @@
+@@ -0,0 +1,352 @@
++## Death / save-load guard candidate installed — October 24
++
++User reported death automatically loading a save while the multiplayer session
++remained connected. The isolated server on 10580 had bEnableDeathSystem=false;
++production on 10578 already had it true and was not changed or restarted.
++The isolated LoreRim profile already stops the competing Respawn quests through
++its compatibility AutoExec. Only this test server config now enables death mode;
++the generic lab generator is unchanged because its baseline handler setup differs.
++
++Native code 54c14cf adds connection-scoped respawn timer cleanup and restores
++essential protection if a delayed compatibility handler clears it. Existing
++engine accessors and the existing bleedout/respawn path are reused; no new engine
++offsets or hooks were introduced. Existing engine behavior remains assumed
++without IDA/Ghidra verification. A completed connected save load now closes the
++transport instead of revisiting the cell in the stale session. This post-load
++fallback does not roll back peers or make older saves consistent with the party.
++
++Client and matching PDB built successfully. Installed client SHA256:
++2ab06f8d549e4a9cf8c62603a3c9be0672537727f35fd924f77842cfb20a16c5.
++Wire identity remains lorerim-rest-recovery-v0.6; no server binary/protocol change.
++Save20 ESS + SKSE, previous client and old test config are hash-verified backups
++under the October23 task work/death-load-guard-candidate/before-install.
++Rollback manifest preserves the original binaries. Isolated server PID29888
++listens on 10580; new host launch requested through MO2 at 00:38.
++
++Runtime acceptance PENDING: load Save20 offline, connect 10580 blank password,
++confirm death mode enabled, then test ordinary lethal combat (not console kill).
++Expected: bleedout, roughly five-second delay, in-session respawn, no save load,
++connection retained, movement restored, repeatable death. Separately verify a
++manual connected load disconnects with the HUD explanation. Do not claim either
++test passed from compilation/startup alone. Preserve the pretest save.
++
++Earlier dashboard and menu host acceptance remain valid; two-client telemetry,
++unpartied sleep, residual magicka regeneration and broader co-op remain open.
++
 +# 1170 startup and rest recovery, October 23, 2026
 +
 +Build identity: `lorerim-rest-recovery-v0.6`. Experimental; host sleep acceptance
@@ -10501,10 +10639,10 @@ index 0000000..166d639
 +ScalePercent=125
 diff --git a/lab/sync_health/README.md b/lab/sync_health/README.md
 new file mode 100644
-index 0000000..ac61b8c
+index 0000000..0bb56a4
 --- /dev/null
 +++ b/lab/sync_health/README.md
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,50 @@
 +# Sync Health panel
 +
 +Read-only in-game timing and connection diagnostics. Default: compact while
@@ -10535,11 +10673,12 @@ index 0000000..ac61b8c
 +  after five seconds of settling. It does not compare calendar dates or prove
 +  that the server clock is correct. Paired checkpoints and transitions may
 +  legitimately change this estimate.
-+- An online save load produces a sticky warning until reconnect. Normal LAN
-+  load handling currently revisits the cell; it does not roll back the server
-+  or peers to the save's inventory/quest state. Disconnect BEFORE loading and
++- An online save load is logged and now closes the connection at the completed
++  load event, with a HUD explanation. It does not roll back the server or peers
++  to the save's inventory/quest state. Disconnect BEFORE loading and
 +  use a save consistent with party progress before reconnecting. Campaign mode
-+  additionally invalidates admission on load, but that is not universal repair.
++  additionally invalidates admission on load. The post-load disconnect is a
++  fallback boundary, not a transactional preload barrier or universal repair.
 +
 +Amber highlights timing/risk indicators, not a measured desync percentage.
 +Server processing time and quest/inventory agreement are explicitly unmeasured.

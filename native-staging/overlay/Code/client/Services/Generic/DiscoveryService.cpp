@@ -300,9 +300,16 @@ void DiscoveryService::OnConnected(const ConnectedEvent& acEvent) noexcept
 BSTEventResult DiscoveryService::OnEvent(const TESLoadGameEvent*, const EventDispatcher<TESLoadGameEvent>*)
 {
     m_world.ctx().at<SyncHealthService>().NoteConnectedLoad();
-    if (CampaignService::IsConfigured() && m_world.GetTransport().IsConnected())
+    if (m_world.GetTransport().IsConnected())
     {
-        CampaignService::SuspendForLoad();
+        if (CampaignService::IsConfigured())
+            CampaignService::SuspendForLoad();
+        // A local save does not rewind the server or its other clients. Never
+        // refresh the restored actors into the old connection/ownership state.
+        spdlog::warn("Save-load guard: closing multiplayer connection after loading a local save");
+        m_world.GetTransport().Close();
+        ResetCachedCellData();
+        Utils::ShowHudMessage(String("Disconnected after loading a save. Reconnect only with a save matching party progress."));
         return BSTEventResult::kOk;
     }
     spdlog::info("Finished loading, triggering visit cell");
