@@ -2,6 +2,32 @@
 
 ## Start here
 
+SYNC HEALTH CURRENT: PID28840 reached main menu (visuallyverified), service-ready
+log00:07:09.080, no new crash observed. One automatedContinueclick had no visible
+effect; do NOT repeat blind inputs. Asyncpromptpending: user loadlatestoffline,
+join10580blankpassword, testF10details/hidden/compact andleavedetailsopen.
+Native910f468 / client91bd7741...c8fc47c installed. Save18 ESS+SKSE and prior
+menuworkingclient backedup/hashverified. Bothserversunchanged. No runtime panel
+visibility/metric/hotkey acceptance yet. Publichelper sourcea9fa599 preserves
+146-filepatchcheckedagainstbase; do not mistake startup for dashboard validation.
+
+
+SYNC HEALTH RELAUNCHED PID28840 at00:07:06 Oct24. Startup log confirms service
+ready00:07:09.080 and menu opcode checks pass. MO2unlock/Runalreadydone. Await
+manual latestsaveOFFLINEload then10580connect andF10 modes/detailsopen response.
+Do not relaunch/replace again while this session is live. Currentclient91bd7741,
+configMode1, F10, X24/Y150, scale125. Save18/menuclient backupsverified.
+
+
+SYNC HEALTH INSTALLED: user reported saved/closed. deploy_sync_health.py copied
+latestSave18 ESS+SKSE and accepted menu executable into work/sync-health-candidate/
+before-install with hash checks, installed91bd7741...c8fc47c and optionalINI under
+hostoverwrite/SKSE/Plugins. Existing original rollback preserved and manifest
+candidate updated. Host executable not yet launched at this note; MO2orphanlock
+unlocked, currentlyrefreshing. Both servers untouched. Need Run13 whenenabled,
+then loadsaveOFFLINE, connect10580 blankpassword and checkF10panel modes.
+
+
 LATEST SYNC HEALTH WORK, October24: user requested the in-game dashboard.
 Native910f468 implements a read-only SyncHealthService, default compact while
 connected; F10 cycles detailed/off/compact. INI template/docs inlab/sync_health.

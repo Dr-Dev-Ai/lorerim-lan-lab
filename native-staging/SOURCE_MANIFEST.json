@@ -161,6 +161,6 @@
     "pickup": "Repeated single-item pickup confirmed with remote replication disabled",
     "menus": "Host Map/Journal clock progression, new manual save/reload, first/third-person and local-map/camera/sound checks passed; custom-menu, overwrite/quicksave, paired-checkpoint and two-client regressions pending",
     "terra": "No new client deployment or production server restart",
-    "sync_health": "Compiled and staged; not installed; runtime checks pending"
+    "sync_health": "Installed; service startup and main menu passed; connected panel/hotkey checks pending"
   }
 }
