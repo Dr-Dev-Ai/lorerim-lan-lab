@@ -1,3 +1,24 @@
+## Unpartied sleep candidate installed and launched — October 24, 01:19
+
+User closed Skyrim. deploy_unpartied_rest.py backed up latest Save22 ESS+SKSE,
+accepted notice client and prior STServer.dll/config with hash checks. Installed
+client5e5f0b66...b27ab4a8 + STServer22ff9446...1a70951 (nativeeaf689b). Matching
+PDBs remain staged privately. Isolated server17180 listens10580, new logs
+server-unpartied-output.log/error.log. Deathmode stilltrue, autopartytrue. Only
+the isolated server was restarted; production24400 remains untouched. Rollback
+manifest retains original client and adds previous accepted server55b0684d.
+
+MO2 Run requested; host PID29548 launched01:19:03, startup service log present.
+Do not reinstall/relaunch while live. Async request pending: load Save22 OFFLINE,
+join10580 blankpassword, LEAVE PARTY while staying connected, stand at usablebed
+without sleeping; capture exhaustion/effects/time before asking user to sleep.
+Unpartied sleep gameplay acceptance PENDING; build alone does not establish it.
+Private manifest/backups are October23task work/unpartied-rest-candidate.
+
+User has NO learned spells, so offline cast/regeneration check was unavailable.
+Residual -100 storage candidate remains unverified; no actor-value edits applied.
+Persistent load-disconnect notice and repeated host respawn already passed.
+
 ## Load guard accepted; unpartied sleep candidate staged — October 24
 
 User confirmed disconnected + persistent notice visible. Installed eec097dd...

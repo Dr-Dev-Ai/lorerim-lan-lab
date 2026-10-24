@@ -166,6 +166,6 @@
     "sync_health": "Host visibility, plausible local metrics and F10 modes passed; remote actor/two-client checks and true state agreement pending",
     "death_respawn": "REPEATED_HOST_COMBAT_RESPAWN_AND_CONNECTED_LOAD_DISCONNECT_PASSED",
     "load_notice": "CONNECTED_LOAD_DISCONNECT_AND_PERSISTENT_NOTICE_PASSED",
-    "unpartied_sleep": "SINGLETON_REST_COMPILED_STAGED_NOT_INSTALLED"
+    "unpartied_sleep": "INSTALLED_UNPARTIED_SLEEP_ACCEPTANCE_PENDING"
   }
 }
