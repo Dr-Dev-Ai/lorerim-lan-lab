@@ -1,0 +1,3 @@
+native-staging/*.patch -text
+native-staging/overlay/** -text
+native-staging/UPSTREAM-LICENSE.txt -text

@@ -1,0 +1,7 @@
+target("CampaignBridgeProbe")
+    set_kind("binary")
+    set_default(false)
+    add_files("Probe.cpp")
+    add_includedirs("../../Code/encoding", "../../build")
+    add_deps("SkyrimEncoding", "TiltedConnect")
+    add_packages("tiltedcore", "hopscotch-map", "glm", "gamenetworkingsockets", "nlohmann_json")
