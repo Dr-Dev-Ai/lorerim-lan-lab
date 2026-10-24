@@ -1,3 +1,15 @@
+## Persistent save-load notice installed — October 24
+
+User saved and quit, then deploy_load_notice.py backed up latest Save21 ESS+SKSE
+and the accepted death-fix client with hash checks. Installed eec097dd...c5631d3
+(native6f4a895) and requested MO2 relaunch. Both servers remained running, no config
+changes. Private manifest/backups: October23 task work/load-notice-candidate.
+Async request pending: load Save21 OFFLINE, join10580 blankpassword, load Save21
+while connected, confirm persistent disconnected notice, leave visible. Do not
+repeat install or combat death tests; host respawn and load-disconnect passed.
+Persistent-notice visibility remains pending. Previous staged-only notes below
+are superseded by this installation record.
+
 ## Save-load disconnect passed; persistent notice staged — October 24
 
 User created a NEW save and loaded it while connected. Client log00:58:26.083

@@ -165,6 +165,6 @@
     "terra": "No new client deployment or production server restart",
     "sync_health": "Host visibility, plausible local metrics and F10 modes passed; remote actor/two-client checks and true state agreement pending",
     "death_respawn": "REPEATED_HOST_COMBAT_RESPAWN_AND_CONNECTED_LOAD_DISCONNECT_PASSED",
-    "load_notice": "PERSISTENT_NOTICE_COMPILED_STAGED_NOT_INSTALLED"
+    "load_notice": "INSTALLED_PERSISTENT_NOTICE_VISIBILITY_PENDING"
   }
 }
