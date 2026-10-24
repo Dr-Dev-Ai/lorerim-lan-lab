@@ -39,7 +39,11 @@ Server processing time and quest/inventory agreement are explicitly unmeasured.
 No new messages, protocol identity, server deployment or third-party plugin.
 True state comparisons and server processing telemetry require further work.
 
-Validation: native client compilation passed. Runtime visibility, values,
-hotkey and menu/control regression checks are pending at initial staging.
+Validation: native client compilation passed. Host runtime visibility and F10 compact/details/hidden modes passed. Detailed
+view was visually inspected: local ping0 ms, quality100%/100%, queue0 ms,
+pending reliable0 bytes, clock estimate+1.1 game seconds and client update4.8 ms.
+Two locally owned actors and no remote streams were present. Remote actor
+measurements and two-client behavior remain untested; the connected-load warning
+was not deliberately induced.
 No new gameplay unit tests were added. Existing source-level engine accessors
 are reused; no new binary patch, vtable slot or raw engine offset is introduced.

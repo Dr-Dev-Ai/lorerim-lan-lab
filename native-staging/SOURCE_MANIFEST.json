@@ -1,7 +1,7 @@
 {
   "upstream_repository": "https://github.com/tiltedphoques/TiltedEvolution.git",
   "base_commit": "5a72cdcd17b998fb1462bb5c6fb0d60d29b98de9",
-  "development_commit": "910f468f32c06da2be3625b49306dfbabd51b7d9",
+  "development_commit": "70c1e85471c32c82f2a119cf0d5d53cf6b38f565",
   "startup_status": "HOST_1170_STARTUP_LOAD_CONNECTION_PASSED",
   "private_script_paths_omitted": [
     "lab/LoreRimLANRest/source/StaticSkillLevelingQuestScript.psc",
@@ -152,7 +152,7 @@
     "lab/party_rest.py": "0b8b0aad3b2537b5a0712274dc9e80f03df791f3b6e9221235271f82478b7550",
     "lab/run_data_checks.sh": "d4abf7440b5f7cf25a98937c36b4cd055905951accc605cd204025a40d72f205",
     "lab/sync_health/LoreRimSyncHealth.ini": "6a39cbfee2de165ac4385d5d48071975878c1de87497e808ff3e12ff05781997",
-    "lab/sync_health/README.md": "71633cb19ec98182031f1bfb314c994a4f474d44e27f17b920f9b27624015ef5",
+    "lab/sync_health/README.md": "2b7b468dde54afe13fb8347689a5bbf4fe6ad397c2fad29ce2e5c65ce72239aa",
     "lab/test_party_rest.py": "3fa3f4af87cbe07052102ade449a4156dbe1467f9e9b0e28f962fe53e42c2a5d",
     "xmake.lua": "932ebe3ddeb92a4cde4e4eb5f609097cd6c73733bb3f43942c7afbc1852f8e0b"
   },
@@ -161,6 +161,6 @@
     "pickup": "Repeated single-item pickup confirmed with remote replication disabled",
     "menus": "Host Map/Journal clock progression, new manual save/reload, first/third-person and local-map/camera/sound checks passed; custom-menu, overwrite/quicksave, paired-checkpoint and two-client regressions pending",
     "terra": "No new client deployment or production server restart",
-    "sync_health": "Installed; service startup and main menu passed; connected panel/hotkey checks pending"
+    "sync_health": "Host visibility, plausible local metrics and F10 modes passed; remote actor/two-client checks and true state agreement pending"
   }
 }

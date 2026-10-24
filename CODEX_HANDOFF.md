@@ -2,6 +2,19 @@
 
 ## Start here
 
+SYNC HEALTH HOST ACCEPTANCE PASSED Oct24: user confirmed panel visible and all
+F10modes work; detailsleftopen and visuallyinspected. PID28840 remainslive,
+client91bd7741...c8fc47c/nativecode910f468. Observed ping0ms, quality100%/100%,
+queue0ms, pendingreliable0bytes, localactors2, remotestreams0, clockestimate+1.1
+gameseconds, clientupdate4.8ms, onehistoricalupdategap>250ms. Plausiblelocalserver
+measurements; do NOT interpretasproofquest/inventoryagreement. Remoteactor
+age/jitter/correction telemetry needssecondclient. Serverprocessingunreported,
+quest/inventoryunmeasured, connected-loadwarningnotdeliberatelyinduced.
+PrivateacceptanceJSON inOctober23task work/sync-health-candidate/acceptance.json.
+No moreinstall/relaunch needed. Do not terminateunsavedhost. LatestbackupSave18.
+Unpartiedsleep, residualmagickaregen penalty andbroadco-opacceptanceremainopen.
+
+
 SYNC HEALTH CURRENT: PID28840 reached main menu (visuallyverified), service-ready
 log00:07:09.080, no new crash observed. One automatedContinueclick had no visible
 effect; do NOT repeat blind inputs. Asyncpromptpending: user loadlatestoffline,
