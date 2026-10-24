@@ -45,6 +45,7 @@ void SyncHealthService::OnConnected(const ConnectedEvent&) noexcept
     m_loadedOnline = false;
     m_nextSample = m_nextHistory = 0.;
     std::lock_guard lock(m_mutex);
+    m_snapshot = {};
     m_historyCount = m_historyNext = 0;
     m_pingHistory.fill(0.f);
     m_ageHistory.fill(0.f);
@@ -53,9 +54,10 @@ void SyncHealthService::OnConnected(const ConnectedEvent&) noexcept
 void SyncHealthService::OnDisconnected(const DisconnectedEvent&) noexcept
 {
     m_reportAt = m_reportNetworkAt = 0.;
-    m_loadedOnline = false;
     std::lock_guard lock(m_mutex);
     m_snapshot = {};
+    // Keep the reason visible after the load guard closes the transport.
+    m_snapshot.LoadedOnline = m_loadedOnline;
 }
 
 void SyncHealthService::NoteConnectedLoad() noexcept
@@ -170,8 +172,6 @@ void SyncHealthService::OnDraw() noexcept
     }
     else
         m_keyDown = false;
-    if (m_mode == 0)
-        return;
     Snapshot sample;
     std::array<float, 120> ping{}, age{};
     size_t count{}, next{};
@@ -183,7 +183,8 @@ void SyncHealthService::OnDraw() noexcept
         count = m_historyCount;
         next = m_historyNext;
     }
-    if (!sample.Connected)
+    const bool cLoadDisconnect = !sample.Connected && sample.LoadedOnline;
+    if ((!sample.Connected && !cLoadDisconnect) || (m_mode == 0 && !cLoadDisconnect))
         return;
     const double cUpdateAge = std::max(0., Now() - m_lastUpdateAt.load(std::memory_order_relaxed));
     const bool cWarning = sample.LoadedOnline || cUpdateAge > 750. || sample.Paused || sample.StaleActors
@@ -198,6 +199,14 @@ void SyncHealthService::OnDraw() noexcept
     if (ImGui::Begin("Sync Health", nullptr, cFlags))
     {
         ImGui::SetWindowFontScale(m_fontScale);
+        if (cLoadDisconnect)
+        {
+            ImGui::TextColored(ImVec4(1.f, 0.75f, 0.25f, 1.f), "DISCONNECTED AFTER LOADING A SAVE");
+            ImGui::TextUnformatted("Loading your save does not rewind the server or other players.");
+            ImGui::TextUnformatted("Reconnect only with a save matching your party's progress.");
+            ImGui::End();
+            return;
+        }
         ImGui::TextColored(cWarning ? ImVec4(1.f, 0.75f, 0.25f, 1.f) : ImVec4(0.4f, 0.9f, 0.65f, 1.f),
             "SYNC HEALTH  |  %s", cWarning ? "CHECK DETAILS" : "MONITORING");
         ImGui::TextDisabled("F10: compact / details / off");

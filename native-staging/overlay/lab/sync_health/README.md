@@ -29,7 +29,9 @@ observe existing decisions without changing playback/correction behavior.
   that the server clock is correct. Paired checkpoints and transitions may
   legitimately change this estimate.
 - An online save load is logged and now closes the connection at the completed
-  load event, with a HUD explanation. It does not roll back the server or peers
+  load event, with a HUD explanation. A persistent disconnected notice remains
+  in the panel until reconnect, including when telemetry display is set to off.
+  No stale connection metrics are shown in that notice. It does not roll back the server or peers
   to the save's inventory/quest state. Disconnect BEFORE loading and
   use a save consistent with party progress before reconnecting. Campaign mode
   additionally invalidates admission on load. The post-load disconnect is a

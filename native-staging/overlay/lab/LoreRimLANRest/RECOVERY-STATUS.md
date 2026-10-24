@@ -1,3 +1,24 @@
+## Save-load disconnect passed; persistent notice staged — October 24
+
+User created a NEW save and loaded it while connected. Client log00:58:26.083
+confirms Save-load guard closed transport, Disconnected from server4, and death
+mode disabled. User confirmed disconnection but did not see the brief HUD message.
+The disconnect boundary PASSED; do not claim the original HUD warning was visible.
+Repeated host combat respawn also passed (three logged five-second respawns).
+
+A follow-up Sync Health change preserves the load-disconnect reason after the
+connection snapshot resets. It displays a persistent notice until reconnect,
+including when normal telemetry is hidden, without stale network metrics. No new
+engine hooks, server/protocol changes, or gameplay tests. Client build PASSED;
+candidate eec097dd...c5631d3 with matching PDB is staged in the October23 task
+work/load-notice-candidate, NOT installed yet. Host PID16860 remains live/offline.
+Async request pending: user save new slot and quit before backup/install. Do not
+replace the running executable or repeat combat death just for this display edit.
+Persistent-notice visibility still needs an in-game connected-load check.
+
+Unpartied sleep and residual magicka regeneration remain next priorities. Terra
+and production server are unchanged. Public source package excludes runtime saves.
+
 ## Repeated host combat respawn passed — October 24, 00:57
 
 User confirmed the repeat death respawned normally, retaining connection and

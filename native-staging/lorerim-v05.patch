@@ -2859,10 +2859,10 @@ index ec897b1..6012c98 100644
          NotifyOverlayOfQuestUpdate(apEvent->formId);
 diff --git a/Code/client/Services/Generic/SyncHealthService.cpp b/Code/client/Services/Generic/SyncHealthService.cpp
 new file mode 100644
-index 0000000..d5bff0c
+index 0000000..6f9b6dc
 --- /dev/null
 +++ b/Code/client/Services/Generic/SyncHealthService.cpp
-@@ -0,0 +1,261 @@
+@@ -0,0 +1,270 @@
 +#include <TiltedOnlinePCH.h>
 +#include <Services/SyncHealthService.h>
 +#include <Services/ImguiService.h>
@@ -2910,6 +2910,7 @@ index 0000000..d5bff0c
 +    m_loadedOnline = false;
 +    m_nextSample = m_nextHistory = 0.;
 +    std::lock_guard lock(m_mutex);
++    m_snapshot = {};
 +    m_historyCount = m_historyNext = 0;
 +    m_pingHistory.fill(0.f);
 +    m_ageHistory.fill(0.f);
@@ -2918,9 +2919,10 @@ index 0000000..d5bff0c
 +void SyncHealthService::OnDisconnected(const DisconnectedEvent&) noexcept
 +{
 +    m_reportAt = m_reportNetworkAt = 0.;
-+    m_loadedOnline = false;
 +    std::lock_guard lock(m_mutex);
 +    m_snapshot = {};
++    // Keep the reason visible after the load guard closes the transport.
++    m_snapshot.LoadedOnline = m_loadedOnline;
 +}
 +
 +void SyncHealthService::NoteConnectedLoad() noexcept
@@ -3035,8 +3037,6 @@ index 0000000..d5bff0c
 +    }
 +    else
 +        m_keyDown = false;
-+    if (m_mode == 0)
-+        return;
 +    Snapshot sample;
 +    std::array<float, 120> ping{}, age{};
 +    size_t count{}, next{};
@@ -3048,7 +3048,8 @@ index 0000000..d5bff0c
 +        count = m_historyCount;
 +        next = m_historyNext;
 +    }
-+    if (!sample.Connected)
++    const bool cLoadDisconnect = !sample.Connected && sample.LoadedOnline;
++    if ((!sample.Connected && !cLoadDisconnect) || (m_mode == 0 && !cLoadDisconnect))
 +        return;
 +    const double cUpdateAge = std::max(0., Now() - m_lastUpdateAt.load(std::memory_order_relaxed));
 +    const bool cWarning = sample.LoadedOnline || cUpdateAge > 750. || sample.Paused || sample.StaleActors
@@ -3063,6 +3064,14 @@ index 0000000..d5bff0c
 +    if (ImGui::Begin("Sync Health", nullptr, cFlags))
 +    {
 +        ImGui::SetWindowFontScale(m_fontScale);
++        if (cLoadDisconnect)
++        {
++            ImGui::TextColored(ImVec4(1.f, 0.75f, 0.25f, 1.f), "DISCONNECTED AFTER LOADING A SAVE");
++            ImGui::TextUnformatted("Loading your save does not rewind the server or other players.");
++            ImGui::TextUnformatted("Reconnect only with a save matching your party's progress.");
++            ImGui::End();
++            return;
++        }
 +        ImGui::TextColored(cWarning ? ImVec4(1.f, 0.75f, 0.25f, 1.f) : ImVec4(0.4f, 0.9f, 0.65f, 1.f),
 +            "SYNC HEALTH  |  %s", cWarning ? "CHECK DETAILS" : "MONITORING");
 +        ImGui::TextDisabled("F10: compact / details / off");
@@ -6116,10 +6125,31 @@ index 0000000..acd7001
 +}
 diff --git a/lab/LoreRimLANRest/RECOVERY-STATUS.md b/lab/LoreRimLANRest/RECOVERY-STATUS.md
 new file mode 100644
-index 0000000..ec0eacb
+index 0000000..39de7a9
 --- /dev/null
 +++ b/lab/LoreRimLANRest/RECOVERY-STATUS.md
-@@ -0,0 +1,373 @@
+@@ -0,0 +1,394 @@
++## Save-load disconnect passed; persistent notice staged — October 24
++
++User created a NEW save and loaded it while connected. Client log00:58:26.083
++confirms Save-load guard closed transport, Disconnected from server4, and death
++mode disabled. User confirmed disconnection but did not see the brief HUD message.
++The disconnect boundary PASSED; do not claim the original HUD warning was visible.
++Repeated host combat respawn also passed (three logged five-second respawns).
++
++A follow-up Sync Health change preserves the load-disconnect reason after the
++connection snapshot resets. It displays a persistent notice until reconnect,
++including when normal telemetry is hidden, without stale network metrics. No new
++engine hooks, server/protocol changes, or gameplay tests. Client build PASSED;
++candidate eec097dd...c5631d3 with matching PDB is staged in the October23 task
++work/load-notice-candidate, NOT installed yet. Host PID16860 remains live/offline.
++Async request pending: user save new slot and quit before backup/install. Do not
++replace the running executable or repeat combat death just for this display edit.
++Persistent-notice visibility still needs an in-game connected-load check.
++
++Unpartied sleep and residual magicka regeneration remain next priorities. Terra
++and production server are unchanged. Public source package excludes runtime saves.
++
 +## Repeated host combat respawn passed — October 24, 00:57
 +
 +User confirmed the repeat death respawned normally, retaining connection and
@@ -10660,10 +10690,10 @@ index 0000000..166d639
 +ScalePercent=125
 diff --git a/lab/sync_health/README.md b/lab/sync_health/README.md
 new file mode 100644
-index 0000000..0bb56a4
+index 0000000..4fb3518
 --- /dev/null
 +++ b/lab/sync_health/README.md
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,52 @@
 +# Sync Health panel
 +
 +Read-only in-game timing and connection diagnostics. Default: compact while
@@ -10695,7 +10725,9 @@ index 0000000..0bb56a4
 +  that the server clock is correct. Paired checkpoints and transitions may
 +  legitimately change this estimate.
 +- An online save load is logged and now closes the connection at the completed
-+  load event, with a HUD explanation. It does not roll back the server or peers
++  load event, with a HUD explanation. A persistent disconnected notice remains
++  in the panel until reconnect, including when telemetry display is set to off.
++  No stale connection metrics are shown in that notice. It does not roll back the server or peers
 +  to the save's inventory/quest state. Disconnect BEFORE loading and
 +  use a save consistent with party progress before reconnecting. Campaign mode
 +  additionally invalidates admission on load. The post-load disconnect is a
