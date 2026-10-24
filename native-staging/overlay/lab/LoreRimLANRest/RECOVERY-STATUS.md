@@ -1,3 +1,43 @@
+## One-hour party sleep regression PASSED — October 24, 01:31
+
+User created a one-person party as leader and confirmed sleep/time/controls work.
+Server session2:1hour/1member/party, Begin01:31:52.234, Finish01:31:52.364,
+canonical advancement accepted01:31:53.789. Client snapshotready01:31:53.306 and
+Complete01:31:53.801. Together with the eight-hour unpartied test, host singleton
+rest now passes both membership modes. Two-client outsider blocking, interrupted
+rest and broader co-op checks remain pending. Binaries unchanged, no reinstall.
+
+Magicka investigation: host storage still reports candidate-100 after exhaustion
+effect833 disappears. Do not infer its owner or force/mod stats. ComputerUse
+grave key produced Journal, so no commands were typed. Async request pending:
+user close Journal, open gameconsole, run read-only player.getavinfo
+magickaratemult, leave output visible. Capture only after user reports ready.
+Host29548 remains live/connected, testserver17180/10580, production unchanged.
+
+## Unpartied eight-hour sleep PASSED — October 24, 01:29
+
+Installed client5e5f0b66...b27ab4a8 + server22ff9446...1a70951, native codeeaf689b,
+host29548/server17180. User confirmed no party, slept8hours, exhaustion improved
+and time advanced. Server session1 explicitly logged1member/unpartied at
+01:29:25.113, Finish01:29:25.725, canonical clock advancement accepted01:29:27.162.
+Rotated client tp_client.1.log records snapshotready01:29:26.732 and Complete
+01:29:27.169. Always search tp_client*.log because 5MB rotation occurs.
+
+Read-only clock:15.20115185 ->23.90990448 in127.276real seconds at timescale20;
+normal passage0.70709075hours, additional skip8.00166188hours. DaysPassed
+3.98315358 ->4.34573269. Active exhaustion spell87A/effect833 magnitude-100
+before rest disappeared afterward. Stored magicka modifier candidate-16 ->0.
+The separate regeneration modifier candidate remains-100; do not claim functional
+magicka regeneration repaired or modify it from this storage read alone. Character
+has no learned spells, so the requested casting recovery check was unavailable.
+
+Acceptance JSON/effect/clock snapshots saved privately under October23task
+work/unpartied-rest-candidate. No saves edited or stat repairs applied. Runtime
+party regression and outsider/cancellation checks remain pending. Async request:
+create a one-person party as leader (testserverautorejoins on reconnect), sleep
+one hour, wait10seconds and check time/controls. Do not reinstall/restart yet.
+Two-client broader co-op acceptance remains open. Production untouched.
+
 ## Load guard accepted; unpartied sleep candidate staged — October 24
 
 User confirmed disconnected + persistent notice visible. Installed eec097dd...
