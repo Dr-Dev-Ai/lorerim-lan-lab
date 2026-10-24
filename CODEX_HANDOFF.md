@@ -2,6 +2,17 @@
 
 ## Start here
 
+LATEST RUNTIME: menu candidate PID10760 loaded Save15 and connected to isolated
+10580 server at23:30:57. Journal Menu opened at23:31:12 and23:31:36; both logged
+flags F2D->F0C on main thread31812. Game remained running, VM inactive0, pause
+count0 between menus. These are hook/connection checks, not full acceptance.
+Async question pending: leave Map open and report ready. Need sample clock and
+pause counter while Map is held, first/third-person and local/world-map checks,
+then create a NEW manual save and reload it (do not overwrite backup Save15).
+No queued/completed manual-save messages yet. Never terminate this live session
+with unsaved progress. PR source sync9ec187a pushed; title/body updated, stilldraft.
+
+
 SOURCE PACKAGE SYNC: native-staging/overlay, source-only patch and manifest now
 match native ee529b22a684aef20268061b44afcddb14c3ea5a. The 141-file patch applies
 cleanly to exact upstream base. Compiled/private third-party scripts remain
