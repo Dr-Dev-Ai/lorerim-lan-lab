@@ -1,7 +1,7 @@
 {
   "upstream_repository": "https://github.com/tiltedphoques/TiltedEvolution.git",
   "base_commit": "5a72cdcd17b998fb1462bb5c6fb0d60d29b98de9",
-  "development_commit": "18db4ab390330cecb34c22e9c45e7ac45fe035a8",
+  "development_commit": "910f468f32c06da2be3625b49306dfbabd51b7d9",
   "startup_status": "HOST_1170_STARTUP_LOAD_CONNECTION_PASSED",
   "private_script_paths_omitted": [
     "lab/LoreRimLANRest/source/StaticSkillLevelingQuestScript.psc",
@@ -9,6 +9,7 @@
     "lab/LoreRimLANRest/source/XtendedStayTIF_UpdateGlobals.psc"
   ],
   "sha256": {
+    "Code/client/Components/InterpolationComponent.h": "06b19bef7aaf6dc2df4505348e0665719aea892cffef33ec79cf85e3f7dae749",
     "Code/client/Events/CampaignFollowerEvent.h": "6748bc00347995e42fc569fe81b988157d451d235dd735a1c2d029dcc2ab19a0",
     "Code/client/Events/CampaignInteractionEvent.h": "b541ecac246c031d025b5c65aba65903fd936da21393cff117bd9b42840a6790",
     "Code/client/Events/DroppedItemPickupEvent.h": "535d95714c06a1f22fcc4ed2be73a642c4e20a97cf29b7b652328eb6f6986ced",
@@ -40,19 +41,21 @@
     "Code/client/Services/Generic/CampaignService.cpp": "ac217e4cc9a6f886b8675df1a45c227f2084d0793074378e1a44109f8baf8940",
     "Code/client/Services/Generic/CharacterService.cpp": "319bdd881f2760550f8a45423d74b3f6d6f3d1840a15907c5753288de2a1a12d",
     "Code/client/Services/Generic/DiscordService.cpp": "fdd8c04ac800c3a8e2d22455888d5eed5865708465e8bbab126949028f54e26d",
-    "Code/client/Services/Generic/DiscoveryService.cpp": "6007bceddb8b81687142da783c8bc6c6059f163af63ec00cee0017a383838fbf",
+    "Code/client/Services/Generic/DiscoveryService.cpp": "b5d23250c882ef12483cf3247b9a24fbf579cea14062e0e0cdbda712078a915a",
     "Code/client/Services/Generic/InventoryService.cpp": "5c90744147e9fe45c3a0f0e7fa90bcb2fbd339d7ff9e9bbe60d9983a9e44fa69",
     "Code/client/Services/Generic/ObjectService.cpp": "46bba366ac0e638b1a1eeeaf7c35d55bcf10735ba09c602ed84e77db26107213",
     "Code/client/Services/Generic/PartyRestService.cpp": "04ae0faf31a43d2353a331c8b34e081b08ccfea4000669c8224888d268592d70",
     "Code/client/Services/Generic/QuestService.cpp": "2ef95928c6d1ed800b8e5870dd050d483bbce43b987441d68f56a176f1275d00",
+    "Code/client/Services/Generic/SyncHealthService.cpp": "dcdb526fc835416b68227b1966a303909a7c01bcc3ad8358ed2ad80fd5a8b03c",
     "Code/client/Services/Generic/TransportService.cpp": "4f3e2100d5d84272550f2c21df67967904835e4123011a75f04a2bcd72bf2294",
     "Code/client/Services/InventoryService.h": "90c5ff41e8283d9cca79baacd4e2afa9fd543f8c1cce05ba2771f4044dcdb44f",
     "Code/client/Services/PapyrusService.h": "e6f12b6802be85ab57252a510212ff66af2883998d90b8f07fb030875172ee0d",
     "Code/client/Services/PartyRestService.h": "0eb54c114c0967318a0781e1668b82e2c208defea42640875295fb965fe4076e",
+    "Code/client/Services/SyncHealthService.h": "e12d5f9faafb1c7ec2df6a2332904094dca8d698593badf12bd215d9b46deeb0",
     "Code/client/Services/TransportService.h": "383063ca2a30a42514bba4f8f3c7295c22c345a0f4197f0cff341b7a41617ae8",
     "Code/client/SkyrimVM64.cpp": "8f8d667ce85bb6993f7cc7cf554662d1e4d29160ecefec9664efd37739cf9736",
-    "Code/client/Systems/InterpolationSystem.cpp": "b3558db9c60c9cc141f11e1e093c197c990b3cafff01438fd3ae540f73b30357",
-    "Code/client/World.cpp": "97c30b9cd1224e4420e8121dc0e4d6e85734740cb726e2e6b5eeedd699c1a33c",
+    "Code/client/Systems/InterpolationSystem.cpp": "fb25358caf7014b52674683f026c0a3d549ea5697f44c962aaaf04479fa5c2b2",
+    "Code/client/World.cpp": "755ac0e4ddf248937b481f4a7ffc1687821cbed877191fb01c939b45549a897b",
     "Code/client/main.cpp": "19f9f23338f8cfd6ede88dd36934387f3deee2b5c6fd69125e3b72d328a1e50d",
     "Code/client/xmake.lua": "2bc1e47ead1963f701abacdf15a8a1e92405c7c1057751862cb752f4588d2213",
     "Code/common/CampaignSave.h": "2e4ad440a57a9a93e50ab7bd70792f281704cb584315b2cce3b995ab1ca7fe3a",
@@ -148,6 +151,8 @@
     "lab/native-support/prelude.h": "c74395a699c315a397bf99f9e0abfc57d593dd8cac9c261ffbe21185c1a542ec",
     "lab/party_rest.py": "0b8b0aad3b2537b5a0712274dc9e80f03df791f3b6e9221235271f82478b7550",
     "lab/run_data_checks.sh": "d4abf7440b5f7cf25a98937c36b4cd055905951accc605cd204025a40d72f205",
+    "lab/sync_health/LoreRimSyncHealth.ini": "6a39cbfee2de165ac4385d5d48071975878c1de87497e808ff3e12ff05781997",
+    "lab/sync_health/README.md": "71633cb19ec98182031f1bfb314c994a4f474d44e27f17b920f9b27624015ef5",
     "lab/test_party_rest.py": "3fa3f4af87cbe07052102ade449a4156dbe1467f9e9b0e28f962fe53e42c2a5d",
     "xmake.lua": "932ebe3ddeb92a4cde4e4eb5f609097cd6c73733bb3f43942c7afbc1852f8e0b"
   },
@@ -155,6 +160,7 @@
     "sleep": "One-player party confirmed; unpartied sleep and remaining magicka regen penalty unresolved",
     "pickup": "Repeated single-item pickup confirmed with remote replication disabled",
     "menus": "Host Map/Journal clock progression, new manual save/reload, first/third-person and local-map/camera/sound checks passed; custom-menu, overwrite/quicksave, paired-checkpoint and two-client regressions pending",
-    "terra": "No new client deployment or production server restart"
+    "terra": "No new client deployment or production server restart",
+    "sync_health": "Compiled and staged; not installed; runtime checks pending"
   }
 }

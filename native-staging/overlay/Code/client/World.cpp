@@ -24,6 +24,7 @@
 #include <Services/CombatService.h>
 #include <Services/WeatherService.h>
 #include <Services/MapService.h>
+#include <Services/SyncHealthService.h>
 
 #include <Events/PreUpdateEvent.h>
 #include <Events/UpdateEvent.h>
@@ -60,6 +61,7 @@ World::World()
     ctx().emplace<PartyRestService>(*this, m_dispatcher, m_transport);
     ctx().emplace<CampaignService>(*this, m_dispatcher, m_transport);
     ctx().emplace<CampaignCheckpointService>(*this, m_dispatcher, m_transport);
+    ctx().emplace<SyncHealthService>(*this, m_dispatcher, m_transport, ctx().at<ImguiService>());
 
     BehaviorVar::Get()->Init();
 }

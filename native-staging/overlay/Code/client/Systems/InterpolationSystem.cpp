@@ -81,7 +81,17 @@ void InterpolationSystem::Update(Actor* apActor, InterpolationComponent& aInterp
 
     // The late snapshot arrived, so the actor is no longer where extrapolation put it
     if (aInterpolationComponent.HasNewTimePoint && aInterpolationComponent.IsExtrapolating)
+    {
         positionError = aInterpolationComponent.Position - position;
+        const float cCorrection = glm::length(positionError);
+        if (!cIsTeleport && cCorrection > 1.f)
+        {
+            ++aInterpolationComponent.CorrectionCount;
+            aInterpolationComponent.LargestCorrection = std::max(aInterpolationComponent.LargestCorrection, cCorrection);
+            if (cCorrection > cMaxPositionCorrection)
+                ++aInterpolationComponent.SnapCount;
+        }
+    }
 
     if (cIsTeleport || glm::length(positionError) > cMaxPositionCorrection)
         positionError = {};
@@ -134,6 +144,8 @@ void InterpolationSystem::AddPoint(InterpolationComponent& aInterpolationCompone
 {
     if (!aInterpolationComponent.Clock.AddSample(aArrivalTime, aPoint.Tick))
         return;
+
+    aInterpolationComponent.LastSnapshotArrivalMs = std::max(aInterpolationComponent.LastSnapshotArrivalMs, aArrivalTime);
 
     auto& timePoints = aInterpolationComponent.TimePoints;
 

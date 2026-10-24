@@ -2,6 +2,25 @@
 
 ## Start here
 
+LATEST SYNC HEALTH WORK, October24: user requested the in-game dashboard.
+Native910f468 implements a read-only SyncHealthService, default compact while
+connected; F10 cycles detailed/off/compact. INI template/docs inlab/sync_health.
+Network quality/queue, per-actor age/jitter/buffer/corrections, update gaps and
+estimated time-of-day difference. No new protocol/server changes. Server CPU/
+processing time and quest/inventory agreement explicitly unmeasured. Uses
+UpdateEvent sampling and mutex-protected render snapshots, bounded history.
+Connected load warning records risk without changing load/disconnect behavior:
+normal DiscoveryService currently only revisits the cell, no full server rollback.
+Disconnect BEFORE loading and reconnect using an agreed save; the earlier Save16
+reload check proved crash/save functionality, NOT multiplayer state agreement.
+Buildpassed. Candidate91bd7741...c8fc47c + matchingPDB staged inOctober23task
+work/sync-health-candidate; NOT installed yet. Host10760 still live. Asyncrequest
+pending: user must save/quit before deploy_sync_health.py can back up/install.
+Do not terminate unsaved progress. Test server31628 and production24400 unchanged.
+After installing: launchthroughMO2, user loadsaveOFFLINEthenconnect10580, inspect
+compact andF10details/off, camera/menuregression. Unavailable metrics muststayN/A.
+
+
 LATEST HOST MENU ACCEPTANCE (supersedes pending-menu notes below):
 Source package synchronized through18db4ab (acceptance docs); installed binary
 contains codeee529b2. New candidate/acceptance documentation does not change binaries.

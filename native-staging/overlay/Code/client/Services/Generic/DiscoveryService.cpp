@@ -2,6 +2,7 @@
 
 #include <Services/DiscoveryService.h>
 #include <Services/CampaignService.h>
+#include <Services/SyncHealthService.h>
 #include <Games/TES.h>
 
 #include <Games/References.h>
@@ -298,6 +299,7 @@ void DiscoveryService::OnConnected(const ConnectedEvent& acEvent) noexcept
 
 BSTEventResult DiscoveryService::OnEvent(const TESLoadGameEvent*, const EventDispatcher<TESLoadGameEvent>*)
 {
+    m_world.ctx().at<SyncHealthService>().NoteConnectedLoad();
     if (CampaignService::IsConfigured() && m_world.GetTransport().IsConnected())
     {
         CampaignService::SuspendForLoad();

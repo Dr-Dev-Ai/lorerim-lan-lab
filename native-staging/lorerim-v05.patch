@@ -1,3 +1,17 @@
+diff --git a/Code/client/Components/InterpolationComponent.h b/Code/client/Components/InterpolationComponent.h
+index 12bef56..6955880 100644
+--- a/Code/client/Components/InterpolationComponent.h
++++ b/Code/client/Components/InterpolationComponent.h
+@@ -31,4 +31,9 @@ struct InterpolationComponent
+     glm::vec3 PositionError{};
+     bool IsExtrapolating{false};
+     bool HasNewTimePoint{false};
++    // Read-only diagnostics; arrival uses the networking clock, not owner ticks.
++    double LastSnapshotArrivalMs{};
++    uint64_t CorrectionCount{};
++    uint64_t SnapCount{};
++    float LargestCorrection{};
+ };
 diff --git a/Code/client/Events/CampaignFollowerEvent.h b/Code/client/Events/CampaignFollowerEvent.h
 new file mode 100644
 index 0000000..c94ba06
@@ -2060,18 +2074,19 @@ index aaea6a3..acbf2c6 100644
          bool updateTimestamp = false;
  
 diff --git a/Code/client/Services/Generic/DiscoveryService.cpp b/Code/client/Services/Generic/DiscoveryService.cpp
-index cea7919..7611fa5 100644
+index cea7919..3ab87cf 100644
 --- a/Code/client/Services/Generic/DiscoveryService.cpp
 +++ b/Code/client/Services/Generic/DiscoveryService.cpp
-@@ -1,6 +1,7 @@
+@@ -1,6 +1,8 @@
  #include <TiltedOnlinePCH.h>
  
  #include <Services/DiscoveryService.h>
 +#include <Services/CampaignService.h>
++#include <Services/SyncHealthService.h>
  #include <Games/TES.h>
  
  #include <Games/References.h>
-@@ -60,7 +61,7 @@ DiscoveryService::DiscoveryService(World& aWorld, entt::dispatcher& aDispatcher)
+@@ -60,7 +62,7 @@ DiscoveryService::DiscoveryService(World& aWorld, entt::dispatcher& aDispatcher)
  
  void DiscoveryService::VisitCell(bool aForceTrigger) noexcept
  {
@@ -2080,7 +2095,7 @@ index cea7919..7611fa5 100644
      if (!pPlayer)
          return;
  
-@@ -69,11 +70,12 @@ void DiscoveryService::VisitCell(bool aForceTrigger) noexcept
+@@ -69,11 +71,12 @@ void DiscoveryService::VisitCell(bool aForceTrigger) noexcept
      else if (pPlayer->GetParentCellEx())
          VisitInteriorCell(aForceTrigger);
  
@@ -2096,10 +2111,11 @@ index cea7919..7611fa5 100644
      }
  }
  
-@@ -296,6 +298,11 @@ void DiscoveryService::OnConnected(const ConnectedEvent& acEvent) noexcept
+@@ -296,6 +299,12 @@ void DiscoveryService::OnConnected(const ConnectedEvent& acEvent) noexcept
  
  BSTEventResult DiscoveryService::OnEvent(const TESLoadGameEvent*, const EventDispatcher<TESLoadGameEvent>*)
  {
++    m_world.ctx().at<SyncHealthService>().NoteConnectedLoad();
 +    if (CampaignService::IsConfigured() && m_world.GetTransport().IsConnected())
 +    {
 +        CampaignService::SuspendForLoad();
@@ -2750,6 +2766,273 @@ index ec897b1..6012c98 100644
      if (!m_world.Get().GetPartyService().IsInParty())
      {
          NotifyOverlayOfQuestUpdate(apEvent->formId);
+diff --git a/Code/client/Services/Generic/SyncHealthService.cpp b/Code/client/Services/Generic/SyncHealthService.cpp
+new file mode 100644
+index 0000000..d5bff0c
+--- /dev/null
++++ b/Code/client/Services/Generic/SyncHealthService.cpp
+@@ -0,0 +1,261 @@
++#include <TiltedOnlinePCH.h>
++#include <Services/SyncHealthService.h>
++#include <Services/ImguiService.h>
++#include <Services/TransportService.h>
++#include <Services/CampaignService.h>
++#include <Events/UpdateEvent.h>
++#include <Events/ConnectedEvent.h>
++#include <Events/DisconnectedEvent.h>
++#include <Messages/ServerTimeSettings.h>
++#include <World.h>
++#include <Components.h>
++#include <Interface/UI.h>
++#include <TimeManager.h>
++#include <BSGraphics/BSGraphicsRenderer.h>
++#include <steam/isteamnetworkingutils.h>
++#include <imgui.h>
++#include <cmath>
++
++double SyncHealthService::Now() noexcept
++{
++    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
++}
++
++SyncHealthService::SyncHealthService(World& aWorld, entt::dispatcher& aDispatcher, TransportService& aTransport, ImguiService& aImgui)
++    : m_world(aWorld), m_transport(aTransport)
++{
++    constexpr auto cIni = L".\\Data\\SKSE\\Plugins\\LoreRimSyncHealth.ini";
++    m_mode = std::clamp(static_cast<int>(GetPrivateProfileIntW(L"Display", L"Mode", 1, cIni)), 0, 2);
++    m_toggleKey = std::clamp(static_cast<int>(GetPrivateProfileIntW(L"Display", L"ToggleKey", VK_F10, cIni)), 1, 254);
++    m_x = static_cast<int>(GetPrivateProfileIntW(L"Display", L"X", 24, cIni));
++    m_y = static_cast<int>(GetPrivateProfileIntW(L"Display", L"Y", 150, cIni));
++    m_fontScale = std::clamp(static_cast<int>(GetPrivateProfileIntW(L"Display", L"ScalePercent", 125, cIni)), 75, 200) / 100.f;
++    m_update = aDispatcher.sink<UpdateEvent>().connect<&SyncHealthService::OnUpdate>(this);
++    m_connected = aDispatcher.sink<ConnectedEvent>().connect<&SyncHealthService::OnConnected>(this);
++    m_disconnected = aDispatcher.sink<DisconnectedEvent>().connect<&SyncHealthService::OnDisconnected>(this);
++    m_time = aDispatcher.sink<ServerTimeSettings>().connect<&SyncHealthService::OnTime>(this);
++    m_draw = aImgui.OnDraw.connect<&SyncHealthService::OnDraw>(this);
++    spdlog::info("Sync Health: read-only panel ready; F10 cycles compact/details/off (configurable)");
++}
++
++void SyncHealthService::OnConnected(const ConnectedEvent&) noexcept
++{
++    m_connectedAt = Now();
++    m_stalls = 0;
++    m_loadedOnline = false;
++    m_nextSample = m_nextHistory = 0.;
++    std::lock_guard lock(m_mutex);
++    m_historyCount = m_historyNext = 0;
++    m_pingHistory.fill(0.f);
++    m_ageHistory.fill(0.f);
++}
++
++void SyncHealthService::OnDisconnected(const DisconnectedEvent&) noexcept
++{
++    m_reportAt = m_reportNetworkAt = 0.;
++    m_loadedOnline = false;
++    std::lock_guard lock(m_mutex);
++    m_snapshot = {};
++}
++
++void SyncHealthService::NoteConnectedLoad() noexcept
++{
++    if (!m_transport.IsConnected())
++        return;
++    m_loadedOnline = true;
++    spdlog::warn("Sync Health: loaded a save while connected; state agreement is unverified. Disconnect before loading, then reconnect to the agreed save.");
++}
++
++void SyncHealthService::OnTime(const ServerTimeSettings& aMessage) noexcept
++{
++    m_serverTime = aMessage.timeModel;
++    m_reportAt = Now();
++    m_reportNetworkAt = m_transport.GetMessageReceiveTime();
++}
++
++void SyncHealthService::OnUpdate(const UpdateEvent& aEvent) noexcept
++{
++    const double cNow = Now();
++    m_lastUpdateAt.store(cNow, std::memory_order_relaxed);
++    if (!m_transport.IsOnline() || !m_transport.IsConnected())
++        return;
++    if (cNow - m_connectedAt > 5000. && aEvent.Delta > 0.25)
++        ++m_stalls;
++    if (cNow < m_nextSample)
++        return;
++    m_nextSample = cNow + 200.;
++    const double cNetworkNow = static_cast<double>(SteamNetworkingUtils()->GetLocalTimestamp()) / 1000.;
++    const auto cStatus = m_transport.GetConnectionStatus();
++    Snapshot sample;
++    sample.Connected = true;
++    sample.SampledAt = cNow;
++    sample.LoadedOnline = m_loadedOnline;
++    sample.Checkpoint = CampaignService::IsCheckpointActive();
++    if (const auto* pUI = UI::Get())
++        sample.Paused = pUI->numPausesGame != 0;
++    sample.Ping = cStatus.m_nPing;
++    sample.QualityIn = cStatus.m_flConnectionQualityLocal;
++    sample.QualityOut = cStatus.m_flConnectionQualityRemote;
++    sample.InKB = cStatus.m_flInBytesPerSec / 1024.f;
++    sample.OutKB = cStatus.m_flOutBytesPerSec / 1024.f;
++    sample.PendingBytes = cStatus.m_cbPendingReliable + cStatus.m_cbSentUnackedReliable;
++    sample.QueueMs = static_cast<double>(cStatus.m_usecQueueTime) / 1000.;
++    sample.PollAge = std::max(0., cNetworkNow - m_transport.GetLastPollTime());
++    sample.FrameMs = aEvent.Delta * 1000.;
++    sample.Stalls = m_stalls;
++    sample.LocalActors = static_cast<uint32_t>(m_world.view<LocalComponent>().size());
++    if (m_reportAt > 0.)
++    {
++        sample.ServerReportAge = std::max(0., cNow - m_reportAt);
++        auto* pTime = TimeData::Get();
++        if (pTime && pTime->GameHour && cNow - m_connectedAt > 5000.)
++        {
++            const double cElapsedMs = std::max(0., cNetworkNow - m_reportNetworkAt) + std::max(sample.Ping, 0) * 0.5;
++            const double cExpectedHour = m_serverTime.Time + cElapsedMs * m_serverTime.TimeScale / 3600000.;
++            sample.ClockErrorSeconds = std::remainder(pTime->GameHour->f - cExpectedHour, 24.) * 3600.;
++            sample.ClockReady = std::isfinite(sample.ClockErrorSeconds);
++        }
++    }
++    auto view = m_world.view<RemoteComponent, InterpolationComponent, FormIdComponent>();
++    for (const auto entity : view)
++    {
++        const auto& interpolation = view.get<InterpolationComponent>(entity);
++        if (!interpolation.Clock.IsRunning() || interpolation.LastSnapshotArrivalMs <= 0.)
++            continue;
++        ActorSample actor;
++        actor.Form = view.get<FormIdComponent>(entity).Id;
++        actor.Server = view.get<RemoteComponent>(entity).Id;
++        actor.Age = std::max(0., cNetworkNow - interpolation.LastSnapshotArrivalMs);
++        actor.Jitter = interpolation.Clock.GetJitter();
++        actor.Delay = interpolation.Clock.GetTargetDelay();
++        actor.Extrapolating = interpolation.IsExtrapolating;
++        ++sample.RemoteActors;
++        sample.Extrapolating += actor.Extrapolating ? 1 : 0;
++        sample.StaleActors += actor.Age > std::max(1000., interpolation.Clock.GetSnapshotInterval() * 6.) ? 1 : 0;
++        sample.Corrections += interpolation.CorrectionCount;
++        sample.Snaps += interpolation.SnapCount;
++        sample.LargestCorrection = std::max(sample.LargestCorrection, interpolation.LargestCorrection);
++        // Keep only five oldest streams; no per-frame heap growth or game calls.
++        size_t row = 0;
++        while (row < sample.ActorRows && sample.Actors[row].Age >= actor.Age)
++            ++row;
++        if (row < sample.Actors.size())
++        {
++            for (size_t i = std::min(sample.ActorRows, sample.Actors.size() - 1); i > row; --i)
++                sample.Actors[i] = sample.Actors[i - 1];
++            sample.Actors[row] = actor;
++            sample.ActorRows = std::min(sample.ActorRows + 1, sample.Actors.size());
++        }
++    }
++    std::lock_guard lock(m_mutex);
++    m_snapshot = sample;
++    if (cNow >= m_nextHistory && sample.Ping >= 0)
++    {
++        m_nextHistory = cNow + 1000.;
++        m_pingHistory[m_historyNext] = static_cast<float>(std::max(sample.Ping, 0));
++        m_ageHistory[m_historyNext] = sample.ActorRows ? static_cast<float>(sample.Actors[0].Age) : 0.f;
++        m_historyNext = (m_historyNext + 1) % m_pingHistory.size();
++        m_historyCount = std::min(m_historyCount + 1, m_pingHistory.size());
++    }
++}
++
++void SyncHealthService::OnDraw() noexcept
++{
++    if (auto* pWindow = BSGraphics::GetMainWindow(); pWindow && pWindow->IsForeground())
++    {
++        const bool cDown = (GetAsyncKeyState(m_toggleKey) & 0x8000) != 0;
++        if (cDown && !m_keyDown)
++            m_mode = (m_mode + 1) % 3;
++        m_keyDown = cDown;
++    }
++    else
++        m_keyDown = false;
++    if (m_mode == 0)
++        return;
++    Snapshot sample;
++    std::array<float, 120> ping{}, age{};
++    size_t count{}, next{};
++    {
++        std::lock_guard lock(m_mutex);
++        sample = m_snapshot;
++        ping = m_pingHistory;
++        age = m_ageHistory;
++        count = m_historyCount;
++        next = m_historyNext;
++    }
++    if (!sample.Connected)
++        return;
++    const double cUpdateAge = std::max(0., Now() - m_lastUpdateAt.load(std::memory_order_relaxed));
++    const bool cWarning = sample.LoadedOnline || cUpdateAge > 750. || sample.Paused || sample.StaleActors
++        || sample.Ping > 150 || (sample.QualityIn >= 0.f && sample.QualityIn < 0.98f)
++        || (sample.QualityOut >= 0.f && sample.QualityOut < 0.98f) || sample.QueueMs > 100.
++        || (sample.ClockReady && std::abs(sample.ClockErrorSeconds) > 60.);
++    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(m_x), static_cast<float>(m_y)), ImGuiCond_Always);
++    ImGui::SetNextWindowBgAlpha(0.82f);
++    constexpr ImGuiWindowFlags cFlags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs
++        | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav
++        | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
++    if (ImGui::Begin("Sync Health", nullptr, cFlags))
++    {
++        ImGui::SetWindowFontScale(m_fontScale);
++        ImGui::TextColored(cWarning ? ImVec4(1.f, 0.75f, 0.25f, 1.f) : ImVec4(0.4f, 0.9f, 0.65f, 1.f),
++            "SYNC HEALTH  |  %s", cWarning ? "CHECK DETAILS" : "MONITORING");
++        ImGui::TextDisabled("F10: compact / details / off");
++        if (sample.LoadedOnline)
++        {
++            ImGui::TextColored(ImVec4(1.f, 0.75f, 0.25f, 1.f), "Save loaded while connected");
++            ImGui::TextUnformatted("Disconnect, load the agreed save, reconnect.");
++        }
++        if (cUpdateAge > 750.)
++            ImGui::Text("Client update gap: %.0f ms (pause/load/stall)", cUpdateAge);
++        else if (sample.Checkpoint)
++            ImGui::TextUnformatted("Paired checkpoint pause (expected)");
++        else if (sample.Paused)
++            ImGui::TextUnformatted("Game pause detected (rest/load may be expected)");
++        if (sample.Ping >= 0)
++            ImGui::Text("Ping: %d ms   Queue: %.1f ms", sample.Ping, sample.QueueMs);
++        else
++            ImGui::TextUnformatted("Ping / queue: waiting for measurements");
++        if (sample.QualityIn >= 0.f && sample.QualityOut >= 0.f)
++            ImGui::Text("Quality in/out: %.1f%% / %.1f%%", sample.QualityIn * 100.f, sample.QualityOut * 100.f);
++        else
++            ImGui::TextUnformatted("Connection quality: waiting for measurements");
++        ImGui::Text("Actor streams: %u   Stale: %u   Predicting: %u", sample.RemoteActors, sample.StaleActors, sample.Extrapolating);
++        if (sample.ClockReady)
++            ImGui::Text("Time of day estimate: %+.1f game seconds", sample.ClockErrorSeconds);
++        else
++            ImGui::TextUnformatted("Time of day estimate: waiting / settling");
++        ImGui::TextDisabled("Timing only; matching game state is not verified.");
++        if (m_mode == 2)
++        {
++            ImGui::Separator();
++            ImGui::Text("Traffic in/out: %.1f / %.1f KiB/s", sample.InKB, sample.OutKB);
++            ImGui::Text("Reliable pending/unacked: %d bytes", sample.PendingBytes);
++            ImGui::Text("Locally owned actors: %u", sample.LocalActors);
++            ImGui::Text("Client update: %.1f ms   Poll age: %.1f ms", sample.FrameMs, sample.PollAge);
++            ImGui::Text("Update gaps >250 ms this connection: %llu", static_cast<unsigned long long>(sample.Stalls));
++            ImGui::Text("Loaded actor corrections/snaps: %llu / %llu", static_cast<unsigned long long>(sample.Corrections), static_cast<unsigned long long>(sample.Snaps));
++            ImGui::Text("Largest correction: %.1f game units", sample.LargestCorrection);
++            if (sample.ServerReportAge >= 0.)
++                ImGui::Text("World-time report age: %.1f s", sample.ServerReportAge / 1000.);
++            ImGui::TextDisabled("Server processing time: not reported");
++            ImGui::TextDisabled("Quest / inventory agreement: not measured");
++            ImGui::TextDisabled("Timing indicators do not prove matching game state.");
++            if (count)
++            {
++                const int cOffset = count == ping.size() ? static_cast<int>(next) : 0;
++                ImGui::PlotLines("Ping ms", ping.data(), static_cast<int>(count), cOffset, nullptr, 0.f, FLT_MAX, ImVec2(360.f, 45.f));
++                ImGui::PlotLines("Oldest actor ms", age.data(), static_cast<int>(count), cOffset, nullptr, 0.f, FLT_MAX, ImVec2(360.f, 45.f));
++            }
++            ImGui::TextUnformatted("Oldest actor streams (form / age / jitter / buffer)");
++            if (!sample.ActorRows)
++                ImGui::TextDisabled("No remote actor samples yet (normal when alone)");
++            for (size_t i = 0; i < sample.ActorRows; ++i)
++            {
++                const auto& actor = sample.Actors[i];
++                ImGui::Text("%08X  %.0f / %.0f / %.0f ms%s", actor.Form, actor.Age, actor.Jitter, actor.Delay, actor.Extrapolating ? " predicting" : "");
++            }
++        }
++    }
++    ImGui::End();
++}
 diff --git a/Code/client/Services/Generic/TransportService.cpp b/Code/client/Services/Generic/TransportService.cpp
 index ed490d1..053ce9c 100644
 --- a/Code/client/Services/Generic/TransportService.cpp
@@ -2968,6 +3251,73 @@ index 0000000..63d7db1
 +    entt::scoped_connection m_updateConnection;
 +    entt::scoped_connection m_disconnectConnection;
 +};
+diff --git a/Code/client/Services/SyncHealthService.h b/Code/client/Services/SyncHealthService.h
+new file mode 100644
+index 0000000..b12ab06
+--- /dev/null
++++ b/Code/client/Services/SyncHealthService.h
+@@ -0,0 +1,61 @@
++#pragma once
++#include <array>
++#include <mutex>
++#include <atomic>
++#include <Structs/TimeModel.h>
++
++struct World;
++struct TransportService;
++struct ImguiService;
++struct UpdateEvent;
++struct ConnectedEvent;
++struct DisconnectedEvent;
++struct ServerTimeSettings;
++
++// Observe on UpdateEvent; render a copied snapshot without touching the ECS.
++struct SyncHealthService
++{
++    SyncHealthService(World&, entt::dispatcher&, TransportService&, ImguiService&);
++    void NoteConnectedLoad() noexcept;
++
++private:
++    struct ActorSample
++    {
++        uint32_t Form{}, Server{};
++        double Age{}, Jitter{}, Delay{};
++        bool Extrapolating{};
++    };
++    struct Snapshot
++    {
++        bool Connected{}, ClockReady{}, LoadedOnline{}, Paused{}, Checkpoint{};
++        int Ping{-1}, PendingBytes{};
++        float QualityIn{-1.f}, QualityOut{-1.f}, InKB{}, OutKB{};
++        double SampledAt{}, PollAge{}, QueueMs{}, FrameMs{}, ServerReportAge{-1.}, ClockErrorSeconds{};
++        uint32_t RemoteActors{}, StaleActors{}, Extrapolating{}, LocalActors{};
++        uint64_t Corrections{}, Snaps{}, Stalls{};
++        float LargestCorrection{};
++        std::array<ActorSample, 5> Actors{};
++        size_t ActorRows{};
++    };
++    void OnUpdate(const UpdateEvent&) noexcept;
++    void OnDraw() noexcept;
++    void OnConnected(const ConnectedEvent&) noexcept;
++    void OnDisconnected(const DisconnectedEvent&) noexcept;
++    void OnTime(const ServerTimeSettings&) noexcept;
++    static double Now() noexcept;
++
++    World& m_world;
++    TransportService& m_transport;
++    entt::scoped_connection m_update, m_draw, m_connected, m_disconnected, m_time;
++    std::mutex m_mutex;
++    Snapshot m_snapshot;
++    std::array<float, 120> m_pingHistory{}, m_ageHistory{};
++    size_t m_historyCount{}, m_historyNext{};
++    double m_nextSample{}, m_nextHistory{}, m_connectedAt{}, m_reportAt{}, m_reportNetworkAt{};
++    TimeModel m_serverTime{};
++    uint64_t m_stalls{};
++    bool m_loadedOnline{}, m_keyDown{};
++    std::atomic<double> m_lastUpdateAt{0.};
++    int m_mode{1}, m_toggleKey{0x79}, m_x{24}, m_y{150};
++    float m_fontScale{1.25f};
++};
 diff --git a/Code/client/Services/TransportService.h b/Code/client/Services/TransportService.h
 index 2ef91ac..a7d58a4 100644
 --- a/Code/client/Services/TransportService.h
@@ -3017,10 +3367,28 @@ index 8e96a9e..16a2730 100644
  
  uintptr_t TP_MAKE_THISCALL(HookVMDestructor, void)
 diff --git a/Code/client/Systems/InterpolationSystem.cpp b/Code/client/Systems/InterpolationSystem.cpp
-index e5fdb7e..8d250fd 100644
+index e5fdb7e..e894b07 100644
 --- a/Code/client/Systems/InterpolationSystem.cpp
 +++ b/Code/client/Systems/InterpolationSystem.cpp
-@@ -96,9 +96,18 @@ void InterpolationSystem::Update(Actor* apActor, InterpolationComponent& aInterp
+@@ -81,7 +81,17 @@ void InterpolationSystem::Update(Actor* apActor, InterpolationComponent& aInterp
+ 
+     // The late snapshot arrived, so the actor is no longer where extrapolation put it
+     if (aInterpolationComponent.HasNewTimePoint && aInterpolationComponent.IsExtrapolating)
++    {
+         positionError = aInterpolationComponent.Position - position;
++        const float cCorrection = glm::length(positionError);
++        if (!cIsTeleport && cCorrection > 1.f)
++        {
++            ++aInterpolationComponent.CorrectionCount;
++            aInterpolationComponent.LargestCorrection = std::max(aInterpolationComponent.LargestCorrection, cCorrection);
++            if (cCorrection > cMaxPositionCorrection)
++                ++aInterpolationComponent.SnapCount;
++        }
++    }
+ 
+     if (cIsTeleport || glm::length(positionError) > cMaxPositionCorrection)
+         positionError = {};
+@@ -96,9 +106,18 @@ void InterpolationSystem::Update(Actor* apActor, InterpolationComponent& aInterp
      if (!apActor)
          return;
  
@@ -3040,11 +3408,20 @@ index e5fdb7e..8d250fd 100644
      if (apActor->currentProcess && apActor->currentProcess->middleProcess)
      {
          apActor->currentProcess->middleProcess->direction = second.Direction;
+@@ -126,6 +145,8 @@ void InterpolationSystem::AddPoint(InterpolationComponent& aInterpolationCompone
+     if (!aInterpolationComponent.Clock.AddSample(aArrivalTime, aPoint.Tick))
+         return;
+ 
++    aInterpolationComponent.LastSnapshotArrivalMs = std::max(aInterpolationComponent.LastSnapshotArrivalMs, aArrivalTime);
++
+     auto& timePoints = aInterpolationComponent.TimePoints;
+ 
+     // Snapshots are unreliable and can arrive out of order
 diff --git a/Code/client/World.cpp b/Code/client/World.cpp
-index b059660..47d1809 100644
+index b059660..7af174d 100644
 --- a/Code/client/World.cpp
 +++ b/Code/client/World.cpp
-@@ -16,6 +16,9 @@
+@@ -16,11 +16,15 @@
  #include <Services/MagicService.h>
  #include <Services/CommandService.h>
  #include <Services/CalendarService.h>
@@ -3054,13 +3431,20 @@ index b059660..47d1809 100644
  #include <Services/StringCacheService.h>
  #include <Services/PlayerService.h>
  #include <Services/CombatService.h>
-@@ -54,6 +57,9 @@ World::World()
+ #include <Services/WeatherService.h>
+ #include <Services/MapService.h>
++#include <Services/SyncHealthService.h>
+ 
+ #include <Events/PreUpdateEvent.h>
+ #include <Events/UpdateEvent.h>
+@@ -54,6 +58,10 @@ World::World()
      ctx().emplace<CombatService>(*this, m_transport, m_dispatcher);
      ctx().emplace<WeatherService>(*this, m_transport, m_dispatcher);
      ctx().emplace<MapService>(*this, m_dispatcher, m_transport);
 +    ctx().emplace<PartyRestService>(*this, m_dispatcher, m_transport);
 +    ctx().emplace<CampaignService>(*this, m_dispatcher, m_transport);
 +    ctx().emplace<CampaignCheckpointService>(*this, m_dispatcher, m_transport);
++    ctx().emplace<SyncHealthService>(*this, m_dispatcher, m_transport, ctx().at<ImguiService>());
  
      BehaviorVar::Get()->Init();
  }
@@ -10101,6 +10485,71 @@ index 0000000..ca86d0f
 +c++ -std=c++20 -Wall -Wextra -Werror -Wno-reorder -ffunction-sections -fdata-sections -include lab/native-support/prelude.h -I lab/native-support -I Code/encoding lab/inventory_data_test.cpp Code/encoding/Structs/Inventory.cpp Code/encoding/Structs/GameId.cpp Code/encoding/Structs/MagicEquipment.cpp -Wl,--gc-sections -o "$check_dir/inventory"
 +"$check_dir/inventory"
 +python -m unittest discover -s lab -p 'test_*.py'
+diff --git a/lab/sync_health/LoreRimSyncHealth.ini b/lab/sync_health/LoreRimSyncHealth.ini
+new file mode 100644
+index 0000000..166d639
+--- /dev/null
++++ b/lab/sync_health/LoreRimSyncHealth.ini
+@@ -0,0 +1,8 @@
++[Display]
++; 0 hidden, 1 compact, 2 detailed. F10 cycles these modes for this session.
++Mode=1
++; Windows virtual key code, decimal 121 is F10.
++ToggleKey=121
++X=24
++Y=150
++ScalePercent=125
+diff --git a/lab/sync_health/README.md b/lab/sync_health/README.md
+new file mode 100644
+index 0000000..75edb2e
+--- /dev/null
++++ b/lab/sync_health/README.md
+@@ -0,0 +1,45 @@
++# Sync Health panel
++
++Read-only in-game timing and connection diagnostics. Default: compact while
++connected. F10 cycles compact, detailed, hidden. It does not capture mouse input.
++Optional settings: `Data/SKSE/Plugins/LoreRimSyncHealth.ini`; see the template.
++Position, scale, initial mode and toggle key apply at startup.
++
++The panel samples ECS/network state on UpdateEvent at most five times per second
++and renders a mutex-protected copy. Graphs keep 120 one-second samples. Only the
++five oldest remote actor streams are retained for display. Rendering never
++queries the ECS or calls actor movement functions. Interpolation diagnostics
++observe existing decisions without changing playback/correction behavior.
++
++- Ping and connection quality come from GameNetworkingSockets. Quality is
++  in-order delivery success, not a precise packet-loss counter.
++- Queue time and pending/unacknowledged reliable bytes describe local sending.
++- Actor age uses the networking receive clock, not a comparison between owner
++  and receiver clocks. Jitter/buffer use the existing per-actor playback clock.
++  Streams older than max(1000 ms, six snapshot intervals) are marked stale.
++  Zero remote samples can be normal on a server with one player.
++- Correction/snap totals cover currently monitored actors; totals may decrease
++  when actors unload or ownership changes. Teleports are excluded. Corrections
++  smaller than one game unit are not counted. Game units are not metres.
++- Update age can continue increasing in the rendering callback while game
++  updates stop. Update gaps above 250 ms also include expected loads and rests.
++- Time-of-day difference is an estimate against the last server calendar
++  report, advanced using its time scale and half the current ping. It is shown
++  after five seconds of settling. It does not compare calendar dates or prove
++  that the server clock is correct. Paired checkpoints and transitions may
++  legitimately change this estimate.
++- An online save load produces a sticky warning until reconnect. Normal LAN
++  load handling currently revisits the cell; it does not roll back the server
++  or peers to the save's inventory/quest state. Disconnect BEFORE loading and
++  use a save consistent with party progress before reconnecting. Campaign mode
++  additionally invalidates admission on load, but that is not universal repair.
++
++Amber highlights timing/risk indicators, not a measured desync percentage.
++Server processing time and quest/inventory agreement are explicitly unmeasured.
++No new messages, protocol identity, server deployment or third-party plugin.
++True state comparisons and server processing telemetry require further work.
++
++Validation: native client compilation passed. Runtime visibility, values,
++hotkey and menu/control regression checks are pending at initial staging.
++No new gameplay unit tests were added. Existing source-level engine accessors
++are reused; no new binary patch, vtable slot or raw engine offset is introduced.
 diff --git a/lab/test_party_rest.py b/lab/test_party_rest.py
 new file mode 100644
 index 0000000..c01f32c
