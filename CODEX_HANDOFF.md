@@ -1,3 +1,14 @@
+## Repeated host combat respawn passed — October 24, 00:57
+
+User confirmed the repeat death respawned normally, retaining connection and
+movement. Logs show THREE completed in-session respawns: 00:54:16.037 ->
+00:54:21.053, 00:56:09.369 ->00:56:14.377, and 00:56:50.156 ->00:56:55.164.
+No intervening save load appears. Installed client remains 2ab06f8d...20a16c5,
+native code54c14cf. Host repeat-death acceptance PASSED. Connected-load fallback
+and two-client respawn visibility remain untested. Async request pending: make
+a NEW manual save, load that same save while connected, verify disconnect/HUD,
+then stay disconnected. Save20 must remain untouched. No reinstall is needed.
+
 ## First multiplayer death check passed — October 24, 00:54
 
 Installed client 2ab06f8d...20a16c5 (native code 54c14cf), host PID16860,
