@@ -1434,7 +1434,7 @@ void CharacterService::RequestServerAssignment(const entt::entity aEntity) const
         auto& questLog = message.QuestContent.Entries;
         auto& modSystem = m_world.GetModSystem();
 
-        for (const auto& objective : PlayerCharacter::Get()->objectives)
+        for (const auto& objective : PlayerCharacter::Get()->GetObjectives())
         {
             auto* pQuest = objective.instance->quest;
             if (!pQuest)

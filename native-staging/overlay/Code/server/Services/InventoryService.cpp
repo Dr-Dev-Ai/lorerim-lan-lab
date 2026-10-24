@@ -105,6 +105,7 @@ void InventoryService::OnInventoryChanges(const PacketEvent<RequestInventoryChan
 
     auto& inventoryComponent = view.get<InventoryComponent>(*it);
     Inventory::Entry transaction = message.Item;
+    bool broadcastReference = false;
     if (message.DroppedId && !message.Drop)
     {
         NotifyInventoryChanges denied;
@@ -121,10 +122,12 @@ void InventoryService::OnInventoryChanges(const PacketEvent<RequestInventoryChan
             || isRemoteNpcInteraction || message.Item.Count <= 0 || message.Item.Count > dropped.value().Item.Count
             || !acMessage.pPlayer->GetCellComponent().IsInRange(dropCell, false))
         {
+            spdlog::warn("[DroppedItem] Rejected claim {} for drop {} (known: {}, count: {})", message.ClaimId, message.DroppedId, dropped != m_drops.end(), message.Item.Count);
             acMessage.pPlayer->Send(denied);
             return;
         }
         m_lastClaim[message.ServerId] = cClaim;
+        broadcastReference = dropped.value().Replicated;
         // Ignore client-supplied enchantment/temper metadata for a claimed item.
         transaction = dropped->second.Item;
         transaction.Count = message.Item.Count;
@@ -135,6 +138,7 @@ void InventoryService::OnInventoryChanges(const PacketEvent<RequestInventoryChan
         }
         if (!dropped.value().Item.Count)
             m_drops.erase(dropped);
+        spdlog::info("[DroppedItem] Accepted claim {} for drop {}, count {}", message.ClaimId, message.DroppedId, transaction.Count);
     }
     else if (message.Drop && message.DroppedId)
     {
@@ -144,18 +148,20 @@ void InventoryService::OnInventoryChanges(const PacketEvent<RequestInventoryChan
             || isRemoteNpcInteraction)
             return;
         m_lastDrop[message.ServerId] = cSequence;
-        if (bEnableItemDrops)
-        {
-            DroppedItem dropped;
-            dropped.Item = message.Item;
-            dropped.Item.Count = -message.Item.Count;
-            dropped.Item.ExtraWorn = dropped.Item.ExtraWornLeft = false;
-            const auto& cell = acMessage.pPlayer->GetCellComponent();
-            dropped.Cell = cell.Cell;
-            dropped.WorldSpace = cell.WorldSpaceId;
-            dropped.Coords = cell.CenterCoords;
-            m_drops.emplace(message.DroppedId, std::move(dropped));
-        }
+        // The origin always tracks its real dropped reference for pickup claims.
+        // Disabling remote replicas must not disable that claim's server record.
+        DroppedItem dropped;
+        dropped.Item = message.Item;
+        dropped.Item.Count = -message.Item.Count;
+        dropped.Item.ExtraWorn = dropped.Item.ExtraWornLeft = false;
+        dropped.Replicated = bEnableItemDrops;
+        broadcastReference = dropped.Replicated;
+        const auto& cell = acMessage.pPlayer->GetCellComponent();
+        dropped.Cell = cell.Cell;
+        dropped.WorldSpace = cell.WorldSpaceId;
+        dropped.Coords = cell.CenterCoords;
+        m_drops.emplace(message.DroppedId, std::move(dropped));
+        spdlog::info("[DroppedItem] Registered drop {}, count {}, replicated: {}", message.DroppedId, -message.Item.Count, broadcastReference);
     }
     if (transaction.Count != 0) m_world.ctx().at<CampaignService>().NoteWorldChange();
     inventoryComponent.Content.AddOrRemoveEntry(transaction);
@@ -170,10 +176,17 @@ void InventoryService::OnInventoryChanges(const PacketEvent<RequestInventoryChan
     notify.DroppedId = message.DroppedId;
     notify.ClaimId = message.ClaimId;
 
-    notify.Drop = bEnableItemDrops && message.DroppedId && !isRemoteNpcInteraction ? message.Drop : false;
+    notify.Drop = broadcastReference && message.Drop;
 
     if (message.ClaimId)
         acMessage.pPlayer->Send(notify);
+    // Peers without a ground replica still need the actor inventory delta.
+    // A nonzero drop ID would route it into their missing-reference claim path.
+    if (!broadcastReference)
+    {
+        notify.DroppedId = 0;
+        notify.ClaimId = 0;
+    }
     const entt::entity cOrigin = static_cast<entt::entity>(message.ServerId);
     if (!GameServer::Get()->SendToPlayersInRange(notify, cOrigin, acMessage.GetSender()))
         spdlog::error("{}: SendToPlayersInRange failed", __FUNCTION__);

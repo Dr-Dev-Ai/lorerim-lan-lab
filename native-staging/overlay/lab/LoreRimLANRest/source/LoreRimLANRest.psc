@@ -1,6 +1,7 @@
 Scriptname LoreRimLANRest Hidden
 ; 1..24: request leader sleep; -1: completed; -2: interrupted;
 ; 0: consume the locally pending completed rest hours once.
+; -8: snapshot needed; -9: this player's SMI snapshot is ready.
 Float Function RestExchange(Float command) Global Native
 
 Int Function NextEquipmentActor() Global Native

@@ -171,7 +171,10 @@ void InventoryService::OnNotifyInventoryChanges(const NotifyInventoryChanges& ac
                 return;
             it.value().Pending = false;
             if (!acMessage.ClaimId || acMessage.Item.Count <= 0)
+            {
+                spdlog::warn("[DroppedItem] Pickup claim {} for drop {} rejected; original reference {:X} retained", acMessage.ClaimId, acMessage.DroppedId, it.value().FormId);
                 return;
+            }
             const uint32_t cPicker = static_cast<uint32_t>(acMessage.ClaimId >> 32);
             if (cPicker != acMessage.ServerId || m_appliedClaims.contains(acMessage.ClaimId))
                 return;
@@ -190,6 +193,7 @@ void InventoryService::OnNotifyInventoryChanges(const NotifyInventoryChanges& ac
             ScopedActivateOverride activation;
             pPicker->PickUpObject(pObject, acMessage.Item.Count, false, 0.f);
         }
+        spdlog::info("[DroppedItem] Applied claim {} for drop {}, count {}, reference {:X}", acMessage.ClaimId, acMessage.DroppedId, acMessage.Item.Count, formId);
         std::lock_guard lock(m_dropMutex);
         m_appliedClaims.insert(acMessage.ClaimId);
         const auto it = m_drops.find(acMessage.DroppedId);
@@ -436,6 +440,7 @@ void InventoryService::OnPickupDropped(const DroppedItemPickupEvent& acEvent) no
     request.ClaimId = (uint64_t{request.ServerId} << 32) | m_nextClaim++;
     request.Item = it.value().Item;
     request.Item.Count = acEvent.Count;
+    spdlog::info("[DroppedItem] Request claim {} for drop {}, count {}", request.ClaimId, request.DroppedId, request.Item.Count);
     m_transport.Send(request);
 }
 
@@ -477,6 +482,7 @@ uint64_t InventoryService::RegisterDropped(Actor* apActor, TESObjectREFR* apDrop
     reference.Item.ExtraWorn = reference.Item.ExtraWornLeft = false;
     const uint64_t cId = reference.Id;
     m_drops.emplace(cId, std::move(reference));
+    spdlog::info("[DroppedItem] Track original drop {} reference {:X}, count {}", cId, apDropped->formID, -acItem.Count);
     return cId;
 }
 

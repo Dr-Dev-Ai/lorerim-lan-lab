@@ -68,7 +68,7 @@ int64_t TP_MAKE_THISCALL(HookCompareVariables, void, BSScript::Variable* apVar1,
     uint64_t handle1 = pObject1->GetHandle();
     uint64_t handle2 = pObject2->GetHandle();
 
-    auto* pPolicy = GameVM::Get()->virtualMachine->GetObjectHandlePolicy();
+    auto* pPolicy = GameVM::Get()->GetVirtualMachine()->GetObjectHandlePolicy();
 
     if (!pPolicy || !handle1 || !handle2 || !pPolicy->HandleIsType((uint32_t)Actor::Type, handle1) || !pPolicy->HandleIsType((uint32_t)Actor::Type, handle2) || !pPolicy->IsHandleObjectAvailable(handle1) || !pPolicy->IsHandleObjectAvailable(handle2))
     {

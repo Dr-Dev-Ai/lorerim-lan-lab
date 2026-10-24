@@ -40,8 +40,11 @@ class UI
 public:
     static UI* Get();
     static bool CheckpointJournal(bool aShow) noexcept;
+    static void FinishCheckpointJournal(bool aClose) noexcept;
     static bool ShowStatsMenu() noexcept;
     static bool HideDialogueMenu() noexcept;
+    static void ProcessUnpausedMenus(bool aMainInactive) noexcept;
+    static bool ConnectedMenusEnabled() noexcept;
 
     bool GetMenuOpen(const BSFixedString& acName) const;
     void CloseAllMenus();

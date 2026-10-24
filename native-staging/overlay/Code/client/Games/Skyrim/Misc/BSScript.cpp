@@ -84,7 +84,7 @@ BSScript::Object* BSScript::Variable::GetObject() const noexcept
 
 template <class T> T* BSScript::Variable::ExtractComplexType() noexcept
 {
-    auto* pPolicy = GameVM::Get()->virtualMachine->GetObjectHandlePolicy();
+    auto* pPolicy = GameVM::Get()->GetVirtualMachine()->GetObjectHandlePolicy();
     BSScript::Object* pBaseObject = GetObject();
 
     if (!pBaseObject || !pPolicy)
@@ -243,7 +243,7 @@ BSScript::IsRemotePlayerFunc::IsRemotePlayerFunc(const char* apFunctionName, con
 
     BSFixedString arg1Name("Actor");
     void* ptr = nullptr;
-    GameVM::Get()->virtualMachine->GetScriptObjectType1(&arg1Name, &ptr);
+    GameVM::Get()->GetVirtualMachine()->GetScriptObjectType1(&arg1Name, &ptr);
     parameters.data[0].pType = ptr;
 }
 
@@ -272,7 +272,7 @@ BSScript::IsPlayerFunc::IsPlayerFunc(const char* apFunctionName, const char* apC
 
     BSFixedString arg1Name("Actor");
     void* ptr = nullptr;
-    GameVM::Get()->virtualMachine->GetScriptObjectType1(&arg1Name, &ptr);
+    GameVM::Get()->GetVirtualMachine()->GetScriptObjectType1(&arg1Name, &ptr);
     parameters.data[0].pType = ptr;
 }
 

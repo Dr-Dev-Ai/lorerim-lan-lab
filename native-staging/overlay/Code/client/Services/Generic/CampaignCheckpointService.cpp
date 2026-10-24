@@ -65,7 +65,7 @@ void CampaignCheckpointService::Resume(bool committed,const std::string& head,ui
     m_stop.store(true);m_wake.notify_all();
     if(m_setHead)m_setHead(m_generation,m_epoch.c_str(),head.c_str(),revision);
     CampaignService::CheckpointPhase(0);
-    if(m_openedJournal)UI::CheckpointJournal(false);
+    UI::FinishCheckpointJournal(m_openedJournal);
     m_phase.clear();m_proposal.clear();m_readySent=false;m_openedJournal=false;
     spdlog::info("Co-op checkpoint {}",committed?"committed":"cancelled; previous checkpoint retained");
 }

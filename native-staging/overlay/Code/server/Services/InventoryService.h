@@ -41,6 +41,7 @@ private:
         GameId Cell{};
         GameId WorldSpace{};
         GridCellCoords Coords{};
+        bool Replicated{};
     };
     Map<uint64_t, DroppedItem> m_drops;
     Map<uint32_t, uint32_t> m_lastDrop;

@@ -1,9 +1,10 @@
 ScriptName SkyrimTogetherPlayerAliasScript extends ReferenceAlias
 
 SkyrimTogetherVerifyLaunchScript Property VerifyLaunchScript Auto
-; Installed Survival Mode Improved default, configurable in a LAN-only plugin.
-Float Property ExhaustionRestoredPerHour = 50.0 Auto
 Bool localSleep = False
+Bool restSnapshotValid = False
+Float restStartExhaustion = 0.0
+Float restRestorePerHour = 0.0
 Int campaignFollowerPoll = 0
 
 Event OnInit()
@@ -16,6 +17,7 @@ Event OnPlayerLoadGame()
     RegisterForSleep()
     RegisterForSingleUpdate(1.0)
     localSleep = False
+    restSnapshotValid = False
 EndEvent
 
 Event OnSleepStart(Float startTime, Float endTime)
@@ -32,25 +34,29 @@ Event OnSleepStop(Bool interrupted)
             LoreRimLANRest.RestExchange(-2.0)
             localSleep = False
         Else
-            ; Let the normal sleep quest apply the sleeper's actual benefit first.
-            Utility.Wait(0.3)
-            PlayerSleepQuestScript sleepQuest = Game.GetFormFromFile(0x000FC1A2, "Skyrim.esm") as PlayerSleepQuestScript
-            Int benefit = 0
-            If sleepQuest
-                If Game.GetPlayer().HasSpell(sleepQuest.MarriageSleepAbility)
-                    benefit = 3
-                ElseIf Game.GetPlayer().HasSpell(sleepQuest.WellRested)
-                    benefit = 2
-                ElseIf Game.GetPlayer().HasSpell(sleepQuest.Rested)
-                    benefit = 1
-                EndIf
-            EndIf
-            LoreRimLANRest.RestExchange(-10.0 - benefit)
+            LoreRimLANRest.RestExchange(-1.0)
         EndIf
     EndIf
 EndEvent
 
 Event OnUpdate()
+    ; Ready is withheld until this player's own SMI need has been captured.
+    ; These forms and the API were checked against installed SMI 1.5.2.
+    GlobalVariable exhaustion = Game.GetFormFromFile(0x816, "ccQDRSSE001-SurvivalMode.esl") as GlobalVariable
+    GlobalVariable restoreRate = Game.GetFormFromFile(0x80E, "ccQDRSSE001-SurvivalMode.esl") as GlobalVariable
+    GlobalVariable exhaustionTimestamp = Game.GetFormFromFile(0xA16, "SurvivalModeImproved.esp") as GlobalVariable
+    If LoreRimLANRest.RestExchange(-8.0) > 0.0
+        If !restSnapshotValid && exhaustion && restoreRate && exhaustionTimestamp
+            restStartExhaustion = exhaustion.GetValue()
+            restRestorePerHour = restoreRate.GetValue()
+            If restStartExhaustion >= 0.0 && restRestorePerHour >= 0.0
+                restSnapshotValid = True
+                LoreRimLANRest.RestExchange(-9.0)
+            EndIf
+        EndIf
+    Else
+        restSnapshotValid = False
+    EndIf
     campaignFollowerPoll += 1
     If campaignFollowerPoll >= 5 && LoreRimLANRest.CampaignFollower(0, 6) == 1
         campaignFollowerPoll = 0
@@ -90,29 +96,26 @@ Event OnUpdate()
     Actor player = Game.GetPlayer()
     If player && !player.IsDead() && !player.IsInCombat() && !Utility.IsInMenuMode()
         Float hours = LoreRimLANRest.RestExchange(0.0)
-        If hours > 0.0
-            ; The sleeper already received the game's normal sleep bookkeeping.
-            If !localSleep
-                SurvivalModeImprovedApi.RestoreExhaustionLevel(hours * ExhaustionRestoredPerHour)
+        If hours > 0.0 && restSnapshotValid && exhaustion && exhaustionTimestamp
+            Float targetExhaustion = restStartExhaustion - hours * restRestorePerHour
+            If targetExhaustion < 0.0
+                targetExhaustion = 0.0
             EndIf
-            Int benefit = LoreRimLANRest.RestExchange(-7.0) as Int
-            If !localSleep && benefit > 0
-                PlayerSleepQuestScript sleepQuest = Game.GetFormFromFile(0x000FC1A2, "Skyrim.esm") as PlayerSleepQuestScript
-                If sleepQuest
-                    sleepQuest.RemoveRested()
-                    If benefit == 3
-                        player.AddSpell(sleepQuest.MarriageSleepAbility, False)
-                    ElseIf benefit == 2
-                        player.AddSpell(sleepQuest.WellRested, False)
-                    ElseIf benefit == 1
-                        player.AddSpell(sleepQuest.Rested, False)
-                    EndIf
-                EndIf
+            Float remainingRelief = exhaustion.GetValue() - targetExhaustion
+            If remainingRelief < 0.0
+                remainingRelief = 0.0
             EndIf
+            ; Mirror SMI's normal wake timestamp before its public restore API.
+            ; The API also reconciles stage spells, tracked magicka penalties,
+            ; and this player's eligibility for rested/spouse/bed benefits.
+            exhaustionTimestamp.SetValue(Utility.GetCurrentGameTime() * 1440.0)
+            SurvivalModeImprovedApi.RestoreExhaustionLevel(remainingRelief)
+            LoreRimLANRest.RestExchange(-7.0)
             ; A local menu adapter must check this player's unspent points.
             ; Do not call SSL.UpdateSkillCaps here: it adds a fresh level award.
             SendModEvent("LoreRimLAN_RestCompleted", "", hours)
             localSleep = False
+            restSnapshotValid = False
         EndIf
     EndIf
     RegisterForSingleUpdate(1.0)

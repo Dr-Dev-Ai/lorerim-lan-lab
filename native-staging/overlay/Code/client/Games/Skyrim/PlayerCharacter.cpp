@@ -26,6 +26,23 @@
 #include <Games/Skyrim/CellRespawnOverrides.h>
 
 #include <ModCompat/BehaviorVar.h>
+#include <VersionDb.h>
+
+namespace
+{
+// These player fields are eight bytes earlier on 1170 than on 1.7.104.
+// The 1170 constructor and destructor confirm the earlier member addresses.
+size_t PlayerFieldOffset(size_t aOffset) noexcept
+{
+    static const bool s_is1170 = VersionDb::Get().GetLoadedVersionString() == "1.6.1170.0";
+    return aOffset - (s_is1170 ? 8 : 0);
+}
+
+template <class T> const T& PlayerField(const PlayerCharacter* apPlayer, size_t aOffset) noexcept
+{
+    return *reinterpret_cast<const T*>(reinterpret_cast<const uint8_t*>(apPlayer) + PlayerFieldOffset(aOffset));
+}
+}
 
 int32_t PlayerCharacter::LastUsedCombatSkill = -1;
 
@@ -52,10 +69,27 @@ PlayerCharacter* PlayerCharacter::Get() noexcept
 
 const GameArray<TintMask*>& PlayerCharacter::GetTints() const noexcept
 {
-    if (overlayTints)
-        return *overlayTints;
+    auto* pOverlay = PlayerField<GameArray<TintMask*>*>(this, offsetof(PlayerCharacter, overlayTints));
+    if (pOverlay)
+        return *pOverlay;
 
-    return baseTints;
+    return PlayerField<GameArray<TintMask*>>(this, offsetof(PlayerCharacter, baseTints));
+}
+
+const GameArray<PlayerCharacter::ObjectiveInstance>& PlayerCharacter::GetObjectives() const noexcept
+{
+    return PlayerField<GameArray<ObjectiveInstance>>(this, offsetof(PlayerCharacter, objectives));
+}
+
+Skills* PlayerCharacter::GetSkills() const noexcept
+{
+    auto* ppSkills = PlayerField<Skills**>(this, offsetof(PlayerCharacter, pSkills));
+    return ppSkills ? *ppSkills : nullptr;
+}
+
+int32_t PlayerCharacter::GetDifficulty() const noexcept
+{
+    return PlayerField<int32_t>(this, offsetof(PlayerCharacter, difficulty));
 }
 
 void PlayerCharacter::SetGodMode(bool aSet) noexcept
@@ -70,7 +104,8 @@ void PlayerCharacter::SetDifficulty(const int32_t aDifficulty, bool aForceUpdate
         return;
 
     int32_t* difficultySetting = Settings::GetDifficulty();
-    *difficultySetting = difficulty = aDifficulty;
+    *difficultySetting = aDifficulty;
+    *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(this) + PlayerFieldOffset(offsetof(PlayerCharacter, difficulty))) = aDifficulty;
 }
 
 void PlayerCharacter::AddSkillExperience(int32_t aSkill, float aExperience) noexcept

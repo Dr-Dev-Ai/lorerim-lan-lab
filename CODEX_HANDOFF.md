@@ -2,6 +2,186 @@
 
 ## Start here
 
+SOURCE PACKAGE SYNC: native-staging/overlay, source-only patch and manifest now
+match native ee529b22a684aef20268061b44afcddb14c3ea5a. The 141-file patch applies
+cleanly to exact upstream base. Compiled/private third-party scripts remain
+excluded. This supersedes older notes saying overlay is still v0.5.
+
+
+LATEST MENU CANDIDATE (supersedes older deployment notes):
+
+### Connected menus candidate, after pickup acceptance
+
+User confirmed fresh bread drop/pickup works. Test server logged successful
+claims for drops 532575944705 and 532575944706 with replication disabled.
+This establishes repeated single-item pickup, not stacks/two-client contention.
+
+User then reported Map and Journal/Escape pause while connected. Candidate
+unpauses ordinary connected menus before stack insertion (including custom
+menus); keeps Loading/Main/Fader, sleep/wait transactions and explicit paired
+checkpoint pauses. Journal manual saves are deferred through the engine save
+event queue; UI processing moves from its worker job to after MainLoop returns.
+Offline menu flags retain normal pause behavior, but UI scheduling also changes
+offline on 1170. A pre-existing journal is paused/unpaused around checkpoints
+with the UI pause counter updated. First-person map player update accepts a
+hidden node while connected; local-map updates cannot restore frozen rendering.
+No new plugin, protocol change, server restart, or Papyrus deployment.
+
+Reference: https://github.com/Vermunds/SkyrimSoulsRE at
+2cbd7d5a0e2a6a04381b4076ac73e8d51332fe32 (GPL-3.0), especially SaveHandler,
+MenuProcessing and MapMenuEx. Adapted behavior, not a complete Skyrim Souls port.
+
+1170 Capstone evidence from game memory dump (NO IDA/Ghidra MCP verification):
+- 35727 -> 14060FD40 save function; all four calls/tail branch validated at
+  22940+C4, 52923+2B, 35533+3E/+60, same target.
+- 35772+5D5 cmp ECX,F0000800, original case +5E1, continuation +72A;
+  custom F0004000 calls queued save; unrelated events skip it.
+- 39042+B JNE25 skips UI job body, retaining original completion signal.
+- 36581+7A FF9080030000 calls player vtable+380 then tests RAX. Existing
+  TESObjectREFR::GetNiNode matches that slot. Hidden node exception only at site.
+- 53112+9D writes EAX to flags+1C; wrapper removes background freeze afterward.
+- 36564+D0 reads UI+160, then Main+16 at +E3, determining paused vs unpaused path;
+  main joins work before returning. Post-return scheduling is an experimental
+  assumption; unlike reference's hardcoded +AF1, it uses existing MainLoop hook.
+All added patch sites check opcodes/branch targets before installation; mismatch
+retains old menu allowlist. Thread correctness, camera/audio/weather rendering,
+manual save/load and two-client progression still require gameplay testing.
+Native compile passes; no new gameplay unit tests written.
+
+Client c77ffed282dcfed607b9a47a6c6c118364761b8810f404c93a0463157a96248f
+installed after user saved/closed; Save15 ESS+SKSE and prior working pickup client
+hash-verified in October23 task work/menu-fix-candidate/before-install. Matching
+candidate PDB retained in staging. Rollback manifest updated, original backups
+preserved. Test server31628/10580 and production24400/10578 untouched.
+Runtime startup and connected menu/save acceptance PENDING.
+
+
+### Local continuation after the 22:06:55 host crash
+
+LATEST DEPLOYMENT supersedes staged-only drop notes below: user recovered bread
+after disconnecting, saved and closed. New Save14 pair at22:55:25 backed up and
+hash-verified in October23task work/drop-fix-candidate/before-install. Native
+42d0eb5 client cf712af5...6fabe0 now INSTALLED; test STServer55b0684d...34c97c
+and matching runner installed, test server restarted as PID31628/10580 (logs
+work/sleep-test-v06/server-dropfix-output.log). Production24400/10578 unchanged.
+Rollback manifest updated preserving original working binaries. Host launched
+PID29096 at22:57:23, still loading at last check. User asked: loadSave14,connect
+10580 blankpassword,note breadcount,dropone,pickonce,check originalcount. Await
+reply/log acceptance. Do not claim pickupfixed from build alone. No need to
+repeat backup/deploy/restart already done. Native public overlay still needs
+sync from fulltree and PRupdate when appropriate; helper native-staging still
+oldv05source. Native upstream must NEVER be pushed; helper PRbranch allowed.
+
+LATEST DROP BUG: user dropped bread, repeated pickup feedback but no inventory
+credit. Current server has bEnableItemDrops=false. Source mismatch: client
+tracks originals and blocks pickup pending a claim, but server only recorded
+drops when remote replication was enabled. Native commit `42d0eb5` always
+records drops, stores Replicated per drop, sends picker claim receipt and
+ordinary inventory delta to peers without replicas; adds diagnostics.
+Client/server builds pass, existing225/13 protocol tests pass (not pickup
+acceptance). Compiled candidate is PREPARED, NOT INSTALLED, October23 task
+work/drop-fix-candidate/manifest.json. Client cf712af5...6fabe0,
+STServer.dll55b0684d...34c97c. Installed host still21b025d8...8f95e34;
+test server PID30996 still old running DLL; production24400 untouched.
+User was asked to disconnect, try original bread (tracking clears on disconnect
+without deleting original), save and quit, then report recovered/stuck/keepopen.
+Await that reply; do not terminate host with new unsaved progress. After exit:
+back up current save pair, deploy prepared client and matching test-server
+binaries, restart ONLY isolated10580server, update rollback candidate manifest,
+launch and test fresh drop/pickup plus stacks before claiming success.
+Latest native recovery doc records full hashes, logic and limitations.
+
+LATEST SLEEP RESULT: user confirmed it works in a party but not outside one.
+Client/server PartyRest session1 completed 8h at 22:46:43; server logged clock
+advancement accepted. One-player party only. Post-rest snapshot private
+October23 task work/sleep-test-v06/effects-after-party-sleep.json: Weary0x833
+absent, Variable03 candidate34->3, but regen multiplier permanent -100 persists.
+Do not claim magicka fully repaired. Beforeparty sleep produced no Begin:
+current script/client/server require party leader/membership while connected
+calendar hook freezes normal game clock. Unpartied sleep remains unsupported
+and unresolved. No native change made yet for that condition. Host is still
+running and user has progressed/levelled; preserve current progress before
+any future restart. No new save has been requested or restored by Codex.
+
+LATEST LIVE CHECK: user loaded same save on PID 30780. Read-only checks passed
+11 quest objectives, 21 tints, skills XP330, difficulty1, initialized animation
+strings. Captures: October 23 task work/sleep-test-v06/player-fields-loaded.json,
+player-extension-loaded.json, effects-before-connect.json. User was asked to
+connect 127.0.0.1:10580 with empty password and wait without sleeping. Logs now
+show accepted connection at 22:42:29, player assignment Request14/cookie0 and
+continued actor sync with no new crash. Await user stability report. Party
+creation/rest NOT yet tested. Preconnect Weary effect still -200; AV candidate
+Variable03=34, needs console corroboration before attributing max-magicka loss.
+
+LATEST after 22:33:48 CONNECTION CRASH: password clearing succeeded; test
+server accepted 3492 mods, then client crashed at 0x1806DF750 in
+CharacterService::RequestServerAssignment+0x4E0 reading objectives from wrong
+player offset +0x590 (RBX=0xB). Native commit `d61163a` adds 1170-aware
+accessors for objectives 588, skills 9B8, difficulty B00, tints B18/B30;
+all active direct consumers audited/replaced. Exact 1170 constructor evidence
+is in native lab/LoreRimLANRest/RECOVERY-STATUS.md. Build passed. Installed
+host hash now `21b025d88b08502a57b8befafe895da51a9a33e7ef59126c85b44e7d68f95e34`.
+Host relaunched PID 30780 at 22:37:43, still finishing startup at last check.
+UPDATE: actual main menu now verified. Automated Continue click/Return moved
+the pointer but did not load; stopped repeated input. User asked to load same
+save and stop BEFORE connecting for read-only field inspection. Await reply.
+At startup read-only field inspection passed (empty objectives/tints, valid
+skills pointer, difficulty 1). Need inspect again AFTER same-save load before
+retrying connection. Script in October 23 task:
+`work/check_player_fields_live.py 30780`. Crash evidence saved privately under
+`work/sleep-test-v06/crash-223348`. No sleep test yet. No new saves created;
+latest host pair remains Save13, 21:44:08. Terra production server untouched.
+
+LATEST RUNTIME: user asked Codex to launch. MO2 was locked by orphan TPProcess
+helpers; its Unlock button restored Run, then Codex clicked LoreRim LAN Test.
+Host PID 27872 launched at 22:24:35 and reached the actual LoreRim main menu
+(Continue/New/Load/Quit verified visually). It is left running there, no save
+loaded. Read-only extension inspection passes: both animation strings have
+allocator 0x18015D968, allocation code 0x18098D7F0, length 0/capacity 15.
+Evidence: October 23 task `work/sleep-test-v06/player-extension-main-menu.json`.
+This verifies initialization, not save-load acceptance. Next: same-save load
+test, then magicka/exhaustion and isolated-server sleep tests if stable.
+
+UPDATE after another crash at 22:15:47: the location candidate ran but hit
+`CachedString::operator=` from `HookPerformAction` copying into player co-op
+state. Dump instructions prove 1170 allocates player size 0xBE8, whereas the
+client allocator only recognized 0xBF0 and missed extension construction.
+Native commit `732c059` recognizes 1170's allocation and reserves the larger
+existing extension layout. Build passed; installed host client SHA256 now
+`38859674be80112e5add730d9cc1e256f555564ed462a2dac74ecc4c4524f518`.
+The user was asked to launch to the main menu and stop there for read-only
+inspection, BEFORE another save-load attempt. Run October 23 task's
+`work/check_player_extension_live.py <current PID>` and preserve output.
+No game process existed at the last check. Latest evidence is preserved in
+`work/sleep-test-v06/crash-221547`; native recovery doc has precise addresses.
+Do not mistake the superseded hash below for the installed candidate.
+
+The authoritative native tree now has local commits `b83b5e4` (1170 VM and
+sleep recovery) and `d42e1b5` (save-load Discord crash). These are experimental,
+not yet synchronized into this helper overlay or pushed. See native
+`lab/LoreRimLANRest/RECOVERY-STATUS.md` for binary evidence and limits.
+
+Two 1170 launches reached the main menu after the VM fixes. The subsequent
+save-load crashed in DiscordService::OnLocationChangeEvent at 0x1806C4C7A:
+raw player +0xAD8 produced invalid pointer 0xC2EAC090, despite failed Discord
+initialization. The follow-up skips unavailable Discord activity and reuses
+Actor::GetCurrentLocation in both discovery and Discord. Build passed;
+save-load retest is pending. Installed client SHA256 is
+`fb05a1152fbeabbb8f8a0c7df8e2e854a64fae0d3145b9a37ae13451e9947570`.
+Protocol identity is still `lorerim-rest-recovery-v0.6`.
+
+The host currently has the v0.6 candidate and two sleep-only overwrite PEXs,
+not the original rollback runtime. Exact rollback manifest and original
+binary backups are under the October 23 task's private
+`work/sleep-test-v06/ROLLBACK.json` and `work/startup-1170-vmfix`. Crash logs,
+matching executable/PDB are preserved in `work/sleep-test-v06/crash-220655`.
+No save or actor-value edits were made. Production server PID 24400/10578
+was left running; isolated v0.6 test server PID 30996/10580 is also running.
+No connection or sleep test has completed. Host relaunch was requested via
+MO2, but no game process was present at the last check; user was asked to
+load the same save and report success/crash/no-launch. Do not claim runtime
+acceptance. Existing native/manager tests passed before the location fix.
+
 The user wants the remaining LoreRim multiplayer issues fixed, with working sleep/time/needs and co-op campaign persistence. **The latest v0.5 native build failed real startup on BOTH PCs and was rolled back. It is NOT installed or ready to apply.** Do not confuse passing build/protocol tests with gameplay acceptance.
 
 Latest immediate issue: sleeping while connected does not advance time, does not reliably restore exhaustion, and magicka does not regenerate. The user manually ran `set Survival_ExhaustionNeedValue to 0`. The subsequent healthy-looking Active Effects list is not evidence that sleeping worked.
@@ -148,3 +328,6 @@ The user prefers completing concrete work and candid short status, not repeated 
 ## Suggested next Codex task
 
 "Read CODEX_HANDOFF.md. Resume from the current rolled-back working runtime. First investigate the verified MagickaRateMult permanent -100 and Magicka permanent -30 without blanket forceav changes, then fix the native 1170 Papyrus-startup crash. Separate the sleep/time fix into a small verifiable candidate. Preserve both players' saves and the working server, and do not claim build/protocol tests prove gameplay."
+
+Menu candidate relaunch PID10760 at23:27:06; startup log confirms opcode checks
+passed and deferred-save/main-thread-UI hooks installed. Main menu pending.

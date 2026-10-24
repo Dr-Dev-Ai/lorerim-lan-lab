@@ -52,8 +52,36 @@ index 0000000..8abdff2
 +{
 +    float Command{};
 +};
+diff --git a/Code/client/Games/Memory.cpp b/Code/client/Games/Memory.cpp
+index d5553ff..46d87a2 100644
+--- a/Code/client/Games/Memory.cpp
++++ b/Code/client/Games/Memory.cpp
+@@ -2,6 +2,7 @@
+ 
+ #include <Games/Memory.h>
+ #include <Games/References.h>
++#include <VersionDb.h>
+ 
+ #include <TiltedCore/MimallocAllocator.hpp>
+ #include <mimalloc.h>
+@@ -28,6 +29,15 @@ static TiltedPhoques::MimallocAllocator s_allocator;
+ 
+ void* TP_MAKE_THISCALL(HookFormAllocate, GameHeap, size_t aSize, size_t aAlignment, bool aAligned)
+ {
++    // 1170 allocates 0xBE8 for the player, while our 1.7.104 layout is 0xBF0.
++    // Reserve the larger layout so all existing ExPlayerCharacter casts agree,
++    // then construct the extension through the same path as the newer runtime.
++    // Without this, the size switch misses the player and leaves its extension
++    // outside the allocation and uninitialized.
++    static const bool s_is1170 = VersionDb::Get().GetLoadedVersionString() == "1.6.1170.0";
++    if (s_is1170 && aSize == 0xBE8)
++        aSize = sizeof(PlayerCharacter);
++
+     switch (aSize)
+     {
+     case sizeof(Actor): aSize = sizeof(ExActor); break;
 diff --git a/Code/client/Games/Misc/BSScript.cpp b/Code/client/Games/Misc/BSScript.cpp
-index 4eef585..5474092 100644
+index 4eef585..6ea12e3 100644
 --- a/Code/client/Games/Misc/BSScript.cpp
 +++ b/Code/client/Games/Misc/BSScript.cpp
 @@ -37,6 +37,11 @@ void TP_MAKE_THISCALL(HookBindEverythingToScript, BSScript::IVirtualMachine*)
@@ -68,6 +96,15 @@ index 4eef585..5474092 100644
      TiltedPhoques::ThisCall(RealBindEverythingToScript, apThis);
  }
  
+@@ -63,7 +68,7 @@ int64_t TP_MAKE_THISCALL(HookCompareVariables, void, BSScript::Variable* apVar1,
+     uint64_t handle1 = pObject1->GetHandle();
+     uint64_t handle2 = pObject2->GetHandle();
+ 
+-    auto* pPolicy = GameVM::Get()->virtualMachine->GetObjectHandlePolicy();
++    auto* pPolicy = GameVM::Get()->GetVirtualMachine()->GetObjectHandlePolicy();
+ 
+     if (!pPolicy || !handle1 || !handle2 || !pPolicy->HandleIsType((uint32_t)Actor::Type, handle1) || !pPolicy->HandleIsType((uint32_t)Actor::Type, handle2) || !pPolicy->IsHandleObjectAvailable(handle1) || !pPolicy->IsHandleObjectAvailable(handle2))
+     {
 diff --git a/Code/client/Games/Misc/MenuTopicManager.cpp b/Code/client/Games/Misc/MenuTopicManager.cpp
 index 5362fb4..da67d2c 100644
 --- a/Code/client/Games/Misc/MenuTopicManager.cpp
@@ -90,6 +127,19 @@ index 5362fb4..da67d2c 100644
      if (apThis->pOptions)
      {
          int i = 0;
+diff --git a/Code/client/Games/References.cpp b/Code/client/Games/References.cpp
+index d626bd0..6710067 100644
+--- a/Code/client/Games/References.cpp
++++ b/Code/client/Games/References.cpp
+@@ -57,7 +57,7 @@ float CalculateRealDamage(Actor* apHittee, float aDamage, bool aKillMove) noexce
+ 
+     bool isPlayer = apHittee == PlayerCharacter::Get();
+ 
+-    float multiplier = s_getDifficultyMultiplier(PlayerCharacter::Get()->difficulty, ActorValueInfo::kHealth, isPlayer);
++    float multiplier = s_getDifficultyMultiplier(PlayerCharacter::Get()->GetDifficulty(), ActorValueInfo::kHealth, isPlayer);
+ 
+     float realDamage = aDamage;
+ 
 diff --git a/Code/client/Games/Skyrim/Actor.cpp b/Code/client/Games/Skyrim/Actor.cpp
 index 9e1933e..bd68f86 100644
 --- a/Code/client/Games/Skyrim/Actor.cpp
@@ -209,10 +259,232 @@ index 4c93c67..c786054 100644
      void StartCombatEx(Actor* apTarget) noexcept;
      void SetCombatTargetEx(Actor* apTarget) noexcept;
 diff --git a/Code/client/Games/Skyrim/Interface/UI.cpp b/Code/client/Games/Skyrim/Interface/UI.cpp
-index 2d76cc1..82a2d94 100644
+index 2d76cc1..6f3eccb 100644
 --- a/Code/client/Games/Skyrim/Interface/UI.cpp
 +++ b/Code/client/Games/Skyrim/Interface/UI.cpp
-@@ -147,3 +147,42 @@ static TiltedPhoques::Initializer s_s(
+@@ -5,8 +5,170 @@
+ #include "immersive_launcher/stubs/DllBlocklist.h"
+ 
+ #include <World.h>
++#include <Services/CampaignService.h>
++#include <TESObjectREFR.h>
++#include <mutex>
+ 
+-static bool g_RequestUnpauseAll{false};
++namespace
++{
++bool s_connectedMenusReady = false;
++using TSaveGame = bool(void*, uint32_t, uint32_t, const char*);
++TSaveGame* RealMenuSave = nullptr;
++struct PendingMenuSave
++{
++    void* Manager{};
++    uint32_t Device{}, Stats{};
++    String Name;
++    bool HasName{}, Pending{};
++};
++PendingMenuSave s_save;
++std::mutex s_saveMutex;
++void (*RealLocalMap)(IMenu*, bool) = nullptr;
++
++void UpdateLocalMap(IMenu* apMenu, bool aLocalMap)
++{
++    RealLocalMap(apMenu, aLocalMap);
++    if (UI::ConnectedMenusEnabled())
++        apMenu->ClearFlag(IMenu::kFreezeFrameBackground | IMenu::kFreezeFramePause);
++}
++
++uintptr_t UpdatePlayerForMap(TESObjectREFR* apPlayer)
++{
++    const uintptr_t cNode = reinterpret_cast<uintptr_t>(apPlayer->GetNiNode());
++    // This call site only tests the result for zero. Keep first-person updates
++    // running while the map camera temporarily hides the player node.
++    if (cNode)
++        return cNode;
++    return UI::ConnectedMenusEnabled() && UI::Get()->GetMenuOpen(BSFixedString("MapMenu")) ? 1 : 0;
++}
++
++bool QueueMenuSave(void* apManager, uint32_t aDevice, uint32_t aStats, const char* apName)
++{
++    if (!UI::ConnectedMenusEnabled())
++        return RealMenuSave(apManager, aDevice, aStats, apName);
++
++    {
++        std::lock_guard lock(s_saveMutex);
++        if (s_save.Pending)
++            return false;
++        s_save = {apManager, aDevice, aStats, apName ? apName : "", apName != nullptr, true};
++    }
++    // The engine processes this queue at its normal main-thread save boundary.
++    POINTER_SKYRIMSE(void(void*, uint32_t), s_requestSave, 35769);
++    s_requestSave.Get()(apManager, 0xF0004000);
++    spdlog::info("Connected menu: queued manual save");
++    return true;
++}
++
++void ProcessMenuSave()
++{
++    PendingMenuSave save;
++    {
++        std::lock_guard lock(s_saveMutex);
++        if (!s_save.Pending)
++            return;
++        save = s_save;
++        // Keep Pending set until the engine finishes; reject a second UI request.
++    }
++    const bool cSaved = RealMenuSave(save.Manager, save.Device, save.Stats, save.HasName ? save.Name.c_str() : nullptr);
++    {
++        std::lock_guard lock(s_saveMutex);
++        s_save = {};
++    }
++    spdlog::info("Connected menu: manual save finished, success={}", cSaved);
++}
++
++bool Matches(const uint8_t* apSite, std::initializer_list<uint8_t> aBytes)
++{
++    return std::equal(aBytes.begin(), aBytes.end(), apSite);
++}
++
++bool IsSaveBranch(const uint8_t* apSite, uint8_t aOpcode, const void* apTarget)
++{
++    int32_t displacement{};
++    memcpy(&displacement, apSite + 1, sizeof(displacement));
++    return apSite[0] == aOpcode && apSite + 5 + displacement == apTarget;
++}
++
++bool InstallConnectedMenus()
++{
++    if (VersionDb::Get().GetLoadedVersionString() != "1.6.1170.0" || stubs::g_IsSoulsREActive)
++        return false;
++
++    VersionDbPtr<uint8_t> events(35772), consoleSave(22940), uiSave(52923), entrySave(35533), job(39042), save(35727), playerUpdate(36581), localMap(53112);
++    // Validate every instruction before changing any of these related paths.
++    if (!IsSaveBranch(consoleSave.Get() + 0xC4, 0xE8, save.Get())
++        || !IsSaveBranch(uiSave.Get() + 0x2B, 0xE9, save.Get())
++        || !IsSaveBranch(entrySave.Get() + 0x3E, 0xE8, save.Get())
++        || !IsSaveBranch(entrySave.Get() + 0x60, 0xE8, save.Get())
++        || !Matches(events.Get() + 0x5D5, {0x81, 0xF9, 0x00, 0x08, 0x00, 0xF0, 0x0F, 0x85})
++        || !Matches(events.Get() + 0x72A, {0x45, 0x33, 0xF6})
++        || !Matches(job.Get() + 0xB, {0x75, 0x25})
++        || !Matches(playerUpdate.Get() + 0x7A, {0xFF, 0x90, 0x80, 0x03, 0x00, 0x00, 0x48, 0x85, 0xC0})
++        || !Matches(localMap.Get() + 0x9D, {0x89, 0x46, 0x1C}))
++    {
++        spdlog::error("Connected menus disabled: 1170 save/UI instructions do not match");
++        return false;
++    }
++
++    // Adapted from Vermunds/SkyrimSoulsRE SaveHandler (GPL-3.0).
++    // Unlike the reference stub, ignore unrelated event codes explicitly.
++    struct SaveEventCode : TiltedPhoques::CodeGenerator
++    {
++        SaveEventCode(uint8_t* apEvents) : CodeGenerator(128)
++        {
++            cmp(ecx, 0xF0000800);
++            jne("custom");
++            jmp_S(apEvents + 0x5E1);
++            L("custom");
++            cmp(ecx, 0xF0004000);
++            jne("done");
++            mov(rax, reinterpret_cast<uintptr_t>(&ProcessMenuSave));
++            call(rax); // Existing engine frame provides aligned shadow space.
++            L("done");
++            jmp_S(apEvents + 0x72A);
++        }
++    } code(events.Get());
++    RealMenuSave = reinterpret_cast<TSaveGame*>(save.Get());
++    TiltedPhoques::PutCall(consoleSave.Get() + 0xC4, &QueueMenuSave);
++    TiltedPhoques::Jump(uiSave.Get() + 0x2B, &QueueMenuSave);
++    TiltedPhoques::PutCall(entrySave.Get() + 0x3E, &QueueMenuSave);
++    TiltedPhoques::PutCall(entrySave.Get() + 0x60, &QueueMenuSave);
++    TiltedPhoques::Jump(events.Get() + 0x5D5, code.getCode());
++    TiltedPhoques::Nop(events.Get() + 0x5DA, 1);
++
++    // Skyrim Souls RE's thread-safety approach: UI work runs after the main
++    // loop joins its workers. Keep the job's completion signal intact.
++    TiltedPhoques::Put<uint8_t>(job.Get() + 0xB, 0xEB);
++    TiltedPhoques::PutCall(playerUpdate.Get() + 0x7A, &UpdatePlayerForMap);
++    TiltedPhoques::Nop(playerUpdate.Get() + 0x7F, 1);
++    RealLocalMap = reinterpret_cast<decltype(RealLocalMap)>(localMap.Get());
++    TP_HOOK(&RealLocalMap, UpdateLocalMap);
++    spdlog::info("Connected menus: 1170 deferred saves and main-thread UI installed");
++    return true;
++}
++}
++
++bool UI::ConnectedMenusEnabled() noexcept
++{
++    return s_connectedMenusReady && !stubs::g_IsSoulsREActive && World::Get().GetTransport().IsConnected();
++}
++
++void UI::ProcessUnpausedMenus(bool aMainInactive) noexcept
++{
++    if (!s_connectedMenusReady || aMainInactive)
++        return;
++    auto* pUI = Get();
++    if (!pUI || pUI->numPausesGame != 0)
++        return; // The engine retains its normal paused-menu path.
++    POINTER_SKYRIMSE(void(UI*), s_processMessages, 82082);
++    POINTER_SKYRIMSE(void(UI*), s_advanceMovies, 82083);
++    POINTER_SKYRIMSE(void*(), s_commands, 52950);
++    POINTER_SKYRIMSE(void(void*), s_executeCommands, 52952);
++    s_processMessages.Get()(pUI);
++    s_advanceMovies.Get()(pUI);
++    s_executeCommands.Get()(s_commands.Get()());
++}
+ 
+ UI* UI::Get()
+ {
+@@ -76,10 +238,21 @@ static void UnfreezeMenu(IMenu* apEntry)
+ static constexpr const char* kAllowList[] = {
+     "TweenMenu",     "MagicMenu",     "StatsMenu",     "InventoryMenu", "MessageBoxMenu",
+     "ContainerMenu", "FavoritesMenu", "Tutorial Menu", "Console"
+-    //"MapMenu", // MapMenu is disabled till we find a proper fix for first person.
+-    //"Journal Menu", // Journal menu, aka pause menu, is disabled until we find a fix for manual save crashing while unpaused.
+ };
+ 
++static bool ShouldUnpause(UI* apUI, IMenu* apMenu)
++{
++    auto* pName = apUI->LookupMenuNameByInstance(apMenu);
++    if (!pName)
++        return false;
++    const std::string_view cName(pName->AsAscii());
++    // These are engine transitions or shared-rest/checkpoint transactions.
++    if (cName == "Loading Menu" || cName == "Main Menu" || cName == "Fader Menu"
++        || cName == "Sleep/Wait Menu" || (cName == "Journal Menu" && CampaignService::IsCheckpointActive()))
++        return false;
++    return true;
++}
++
+ static void* (*UI_AddToActiveQueue)(UI*, IMenu*, void*);
+ 
+ static void* UI_AddToActiveQueue_Hook(UI* apSelf, IMenu* apMenu, void* apFoundItem /*In reality a reference*/)
+@@ -95,7 +268,16 @@ static void* UI_AddToActiveQueue_Hook(UI* apSelf, IMenu* apMenu, void* apFoundIt
+         }
+ #endif
+ 
+-    // NOTE(Force): could also compare by RTTI later on...
++    if (UI::ConnectedMenusEnabled() && ShouldUnpause(apSelf, apMenu))
++    {
++        const uint32_t cFlags = apMenu->uiMenuFlags;
++        UnfreezeMenu(apMenu);
++        if (cFlags != apMenu->uiMenuFlags)
++            spdlog::info("Connected menu: unpaused {} flags {:X}->{:X}", apSelf->LookupMenuNameByInstance(apMenu)->AsAscii(), cFlags, apMenu->uiMenuFlags);
++        return UI_AddToActiveQueue(apSelf, apMenu, apFoundItem);
++    }
++
++    // Retain the original supported menus if the expanded hooks were rejected.
+     for (const char* item : kAllowList)
+     {
+         if (auto* pMenu = apSelf->FindMenuByName(item))
+@@ -121,6 +303,7 @@ void UIMessageQueue__AddMessage(void* a1, const BSFixedString* a2, UIMessage::UI
+ static TiltedPhoques::Initializer s_s(
+     []()
+     {
++        s_connectedMenusReady = InstallConnectedMenus();
+         // pray that this doesnt fail!
+         VersionDbPtr<uint8_t> ProcessHook(82082);
+         TiltedPhoques::SwapCall(ProcessHook.Get() + 0x682, UI_AddToActiveQueue, &UI_AddToActiveQueue_Hook);
+@@ -147,3 +330,72 @@ static TiltedPhoques::Initializer s_s(
          // use 8 threads by default!
          // TiltedPhoques::Put<uint8_t>(0x141E45770, 8);
      });
@@ -247,6 +519,18 @@ index 2d76cc1..82a2d94 100644
 +
 +bool UI::CheckpointJournal(bool show) noexcept
 +{
++    // A journal opened before the checkpoint is already on the UI stack.
++    // Updating its pause flag therefore also needs to update the UI counter.
++    if (show && ConnectedMenusEnabled() && CampaignService::IsCheckpointActive())
++    {
++        auto* pUI = Get();
++        auto* pMenu = pUI ? pUI->FindMenuByName(BSFixedString("Journal Menu")) : nullptr;
++        if (pMenu && pUI->GetMenuOpen(BSFixedString("Journal Menu")) && !pMenu->PausesGame())
++        {
++            pMenu->SetFlag(IMenu::kPausesGame);
++            ++pUI->numPausesGame;
++        }
++    }
 +    POINTER_SKYRIMSE(void*, queue, 400445);
 +    if (!*queue.Get()) return false;
 +    using AddMessage = void(void*, const BSFixedString*, uint32_t, void*);
@@ -255,22 +539,43 @@ index 2d76cc1..82a2d94 100644
 +    add.Get()(*queue.Get(), &menu, show ? UIMessage::kShow : UIMessage::kHide, nullptr);
 +    return true;
 +}
++
++void UI::FinishCheckpointJournal(bool aClose) noexcept
++{
++    if (aClose)
++    {
++        CheckpointJournal(false);
++        return;
++    }
++    auto* pUI = Get();
++    if (!ConnectedMenusEnabled() || !pUI || !pUI->GetMenuOpen(BSFixedString("Journal Menu")))
++        return;
++    auto* pMenu = pUI->FindMenuByName(BSFixedString("Journal Menu"));
++    if (pMenu && pMenu->PausesGame() && pUI->numPausesGame > 0)
++    {
++        pMenu->ClearFlag(IMenu::kPausesGame);
++        --pUI->numPausesGame;
++    }
++}
 diff --git a/Code/client/Games/Skyrim/Interface/UI.h b/Code/client/Games/Skyrim/Interface/UI.h
-index 11d2e12..5dc9619 100644
+index 11d2e12..d552723 100644
 --- a/Code/client/Games/Skyrim/Interface/UI.h
 +++ b/Code/client/Games/Skyrim/Interface/UI.h
-@@ -39,6 +39,9 @@ class UI
+@@ -39,6 +39,12 @@ class UI
  {
  public:
      static UI* Get();
 +    static bool CheckpointJournal(bool aShow) noexcept;
++    static void FinishCheckpointJournal(bool aClose) noexcept;
 +    static bool ShowStatsMenu() noexcept;
 +    static bool HideDialogueMenu() noexcept;
++    static void ProcessUnpausedMenus(bool aMainInactive) noexcept;
++    static bool ConnectedMenusEnabled() noexcept;
  
      bool GetMenuOpen(const BSFixedString& acName) const;
      void CloseAllMenus();
 diff --git a/Code/client/Games/Skyrim/Misc/BSScript.cpp b/Code/client/Games/Skyrim/Misc/BSScript.cpp
-index 4fa7db7..e45c7bf 100644
+index 4fa7db7..841cd15 100644
 --- a/Code/client/Games/Skyrim/Misc/BSScript.cpp
 +++ b/Code/client/Games/Skyrim/Misc/BSScript.cpp
 @@ -1,5 +1,7 @@
@@ -281,6 +586,33 @@ index 4fa7db7..e45c7bf 100644
  
  uint64_t BSScript::Object::GetHandle()
  {
+@@ -82,7 +84,7 @@ BSScript::Object* BSScript::Variable::GetObject() const noexcept
+ 
+ template <class T> T* BSScript::Variable::ExtractComplexType() noexcept
+ {
+-    auto* pPolicy = GameVM::Get()->virtualMachine->GetObjectHandlePolicy();
++    auto* pPolicy = GameVM::Get()->GetVirtualMachine()->GetObjectHandlePolicy();
+     BSScript::Object* pBaseObject = GetObject();
+ 
+     if (!pBaseObject || !pPolicy)
+@@ -241,7 +243,7 @@ BSScript::IsRemotePlayerFunc::IsRemotePlayerFunc(const char* apFunctionName, con
+ 
+     BSFixedString arg1Name("Actor");
+     void* ptr = nullptr;
+-    GameVM::Get()->virtualMachine->GetScriptObjectType1(&arg1Name, &ptr);
++    GameVM::Get()->GetVirtualMachine()->GetScriptObjectType1(&arg1Name, &ptr);
+     parameters.data[0].pType = ptr;
+ }
+ 
+@@ -270,7 +272,7 @@ BSScript::IsPlayerFunc::IsPlayerFunc(const char* apFunctionName, const char* apC
+ 
+     BSFixedString arg1Name("Actor");
+     void* ptr = nullptr;
+-    GameVM::Get()->virtualMachine->GetScriptObjectType1(&arg1Name, &ptr);
++    GameVM::Get()->GetVirtualMachine()->GetScriptObjectType1(&arg1Name, &ptr);
+     parameters.data[0].pType = ptr;
+ }
+ 
 @@ -302,3 +304,64 @@ bool BSScript::DidLaunchSkyrimTogetherFunc::MarshallAndDispatch(Variable* apBase
      apResult->Set<bool>(true);
      return true;
@@ -381,6 +713,58 @@ index fff6dec..2fed59f 100644
      // Bad PoC code
  #if 0
      template <class... T> struct EventArguments : IFunctionArguments
+diff --git a/Code/client/Games/Skyrim/Misc/GameVM.cpp b/Code/client/Games/Skyrim/Misc/GameVM.cpp
+index 8872158..744b675 100644
+--- a/Code/client/Games/Skyrim/Misc/GameVM.cpp
++++ b/Code/client/Games/Skyrim/Misc/GameVM.cpp
+@@ -1,6 +1,7 @@
+ #include <TiltedOnlinePCH.h>
+ 
+ #include <Misc/GameVM.h>
++#include <VersionDb.h>
+ 
+ SkyrimVM* SkyrimVM::Get()
+ {
+@@ -8,3 +9,19 @@ SkyrimVM* SkyrimVM::Get()
+ 
+     return *s_instance.Get();
+ }
++
++BSScript::IVirtualMachine* SkyrimVM::GetVirtualMachine() const noexcept
++{
++    // Verified against the live 1170 VM and the failing launcher disassembly.
++    // 0x210 in 1170 points to IVMDebugInterface, not IVirtualMachine.
++    const size_t cOffset = VersionDb::Get().GetLoadedVersionString() == "1.6.1170.0" ? 0x200 : 0x210;
++    return *reinterpret_cast<BSScript::IVirtualMachine* const*>(reinterpret_cast<const uint8_t*>(this) + cOffset);
++}
++
++bool SkyrimVM::IsInactive() const noexcept
++{
++    // 1170's VM update (Address Library 53926) reads the freeze byte at
++    // +0x680. +0x690 is currentVMMenuModeTime and increases while running.
++    const size_t cOffset = VersionDb::Get().GetLoadedVersionString() == "1.6.1170.0" ? 0x680 : 0x690;
++    return *reinterpret_cast<const uint32_t*>(reinterpret_cast<const uint8_t*>(this) + cOffset) != 0;
++}
+diff --git a/Code/client/Games/Skyrim/Misc/GameVM.h b/Code/client/Games/Skyrim/Misc/GameVM.h
+index 614010e..20c5fbb 100644
+--- a/Code/client/Games/Skyrim/Misc/GameVM.h
++++ b/Code/client/Games/Skyrim/Misc/GameVM.h
+@@ -8,9 +8,15 @@ struct SkyrimVM
+ 
+     static SkyrimVM* Get();
+ 
++    BSScript::IVirtualMachine* GetVirtualMachine() const noexcept;
++    bool IsInactive() const noexcept;
++
+     uint8_t pad8[0x210 - 0x8];
++    // 1.7.104 layout only. On 1.6.1170 this slot is IVMDebugInterface.
++    // Call GetVirtualMachine() rather than reading this field.
+     BSScript::IVirtualMachine* virtualMachine;
+     uint8_t pad218[0x690 - 0x218];
++    // 1.7.104 layout; use IsInactive() for runtime-specific access.
+     int32_t inactive;
+ };
+ 
 diff --git a/Code/client/Games/Skyrim/Misc/MiddleProcess.h b/Code/client/Games/Skyrim/Misc/MiddleProcess.h
 index a38e358..4ec5e42 100644
 --- a/Code/client/Games/Skyrim/Misc/MiddleProcess.h
@@ -405,7 +789,7 @@ index a38e358..4ec5e42 100644
 +
 +static_assert(offsetof(MiddleProcess, occupiedFurniture) == 0x208);
 diff --git a/Code/client/Games/Skyrim/PlayerCharacter.cpp b/Code/client/Games/Skyrim/PlayerCharacter.cpp
-index efe4f69..b96497c 100644
+index efe4f69..0efae0f 100644
 --- a/Code/client/Games/Skyrim/PlayerCharacter.cpp
 +++ b/Code/client/Games/Skyrim/PlayerCharacter.cpp
 @@ -9,10 +9,12 @@
@@ -421,7 +805,72 @@ index efe4f69..b96497c 100644
  
  #include <Games/Skyrim/Forms/ActorValueInfo.h>
  #include <Games/ActorExtension.h>
-@@ -82,6 +84,7 @@ void PlayerCharacter::AddSkillExperience(int32_t aSkill, float aExperience) noex
+@@ -24,6 +26,23 @@
+ #include <Games/Skyrim/CellRespawnOverrides.h>
+ 
+ #include <ModCompat/BehaviorVar.h>
++#include <VersionDb.h>
++
++namespace
++{
++// These player fields are eight bytes earlier on 1170 than on 1.7.104.
++// The 1170 constructor and destructor confirm the earlier member addresses.
++size_t PlayerFieldOffset(size_t aOffset) noexcept
++{
++    static const bool s_is1170 = VersionDb::Get().GetLoadedVersionString() == "1.6.1170.0";
++    return aOffset - (s_is1170 ? 8 : 0);
++}
++
++template <class T> const T& PlayerField(const PlayerCharacter* apPlayer, size_t aOffset) noexcept
++{
++    return *reinterpret_cast<const T*>(reinterpret_cast<const uint8_t*>(apPlayer) + PlayerFieldOffset(aOffset));
++}
++}
+ 
+ int32_t PlayerCharacter::LastUsedCombatSkill = -1;
+ 
+@@ -50,10 +69,27 @@ PlayerCharacter* PlayerCharacter::Get() noexcept
+ 
+ const GameArray<TintMask*>& PlayerCharacter::GetTints() const noexcept
+ {
+-    if (overlayTints)
+-        return *overlayTints;
++    auto* pOverlay = PlayerField<GameArray<TintMask*>*>(this, offsetof(PlayerCharacter, overlayTints));
++    if (pOverlay)
++        return *pOverlay;
+ 
+-    return baseTints;
++    return PlayerField<GameArray<TintMask*>>(this, offsetof(PlayerCharacter, baseTints));
++}
++
++const GameArray<PlayerCharacter::ObjectiveInstance>& PlayerCharacter::GetObjectives() const noexcept
++{
++    return PlayerField<GameArray<ObjectiveInstance>>(this, offsetof(PlayerCharacter, objectives));
++}
++
++Skills* PlayerCharacter::GetSkills() const noexcept
++{
++    auto* ppSkills = PlayerField<Skills**>(this, offsetof(PlayerCharacter, pSkills));
++    return ppSkills ? *ppSkills : nullptr;
++}
++
++int32_t PlayerCharacter::GetDifficulty() const noexcept
++{
++    return PlayerField<int32_t>(this, offsetof(PlayerCharacter, difficulty));
+ }
+ 
+ void PlayerCharacter::SetGodMode(bool aSet) noexcept
+@@ -68,7 +104,8 @@ void PlayerCharacter::SetDifficulty(const int32_t aDifficulty, bool aForceUpdate
+         return;
+ 
+     int32_t* difficultySetting = Settings::GetDifficulty();
+-    *difficultySetting = difficulty = aDifficulty;
++    *difficultySetting = aDifficulty;
++    *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(this) + PlayerFieldOffset(offsetof(PlayerCharacter, difficulty))) = aDifficulty;
+ }
+ 
+ void PlayerCharacter::AddSkillExperience(int32_t aSkill, float aExperience) noexcept
+@@ -82,6 +119,7 @@ void PlayerCharacter::AddSkillExperience(int32_t aSkill, float aExperience) noex
  
      float newExperience = GetSkillExperience(skill);
      float deltaExperience = newExperience - oldExperience;
@@ -429,7 +878,7 @@ index efe4f69..b96497c 100644
  
      spdlog::debug("Added {} experience to skill {}", deltaExperience, aSkill);
  }
-@@ -164,18 +167,23 @@ void PlayerCharacter::RemoveWaypoint() noexcept
+@@ -164,18 +202,23 @@ void PlayerCharacter::RemoveWaypoint() noexcept
  
  char TP_MAKE_THISCALL(HookPickUpObject, PlayerCharacter, TESObjectREFR* apObject, int32_t aCount, bool aUnk1, bool aUnk2)
  {
@@ -455,7 +904,7 @@ index efe4f69..b96497c 100644
      // This is here so that objects that are picked up on both clients, aka non temps, are synced through activation sync.
      // The inventory change event should always be sent to the server, otherwise the server inventory won't be updated.
      bool shouldUpdateClients = apObject->IsTemporary() && !ScopedActivateOverride::IsOverriden();
-@@ -217,6 +225,7 @@ void TP_MAKE_THISCALL(HookAddSkillExperience, PlayerCharacter, int32_t aSkill, f
+@@ -217,6 +260,7 @@ void TP_MAKE_THISCALL(HookAddSkillExperience, PlayerCharacter, int32_t aSkill, f
  
      float newExperience = apThis->GetSkillExperience(skill);
      float deltaExperience = newExperience - oldExperience;
@@ -463,6 +912,43 @@ index efe4f69..b96497c 100644
  
      spdlog::debug("Skill (AVI): {}, experience: {}", aSkill, deltaExperience);
  
+diff --git a/Code/client/Games/Skyrim/PlayerCharacter.h b/Code/client/Games/Skyrim/PlayerCharacter.h
+index ee9f987..78fb10e 100644
+--- a/Code/client/Games/Skyrim/PlayerCharacter.h
++++ b/Code/client/Games/Skyrim/PlayerCharacter.h
+@@ -107,12 +107,14 @@ struct PlayerCharacter : Actor
+     static void SetGodMode(bool aSet) noexcept;
+ 
+     const GameArray<TintMask*>& GetTints() const noexcept;
++    Skills* GetSkills() const noexcept;
++    int32_t GetDifficulty() const noexcept;
+ 
+     // TODO: there's an in game function for this in fallout 4, maybe also for skyrim?
+     void SetDifficulty(const int32_t aDifficulty, bool aForceUpdate = true, bool aExpectGameDataLoaded = true) noexcept;
+ 
+     void AddSkillExperience(int32_t aSkill, float aExperience) noexcept;
+-    float GetSkillExperience(Skills::Skill aSkill) const noexcept { return (*pSkills)->skills[aSkill].xp; }
++    float GetSkillExperience(Skills::Skill aSkill) const noexcept { return GetSkills()->skills[aSkill].xp; }
+ 
+     NiPoint3 RespawnPlayer() noexcept;
+ 
+@@ -133,6 +135,8 @@ struct PlayerCharacter : Actor
+         uint64_t instanceCount;
+     };
+ 
++    const GameArray<ObjectiveInstance>& GetObjectives() const noexcept;
++
+     uint8_t pad1[0x590 - sizeof(Actor)];
+     GameArray<ObjectiveInstance> objectives;
+     uint8_t pad588[0x9B0 - 0x598];
+@@ -151,6 +155,7 @@ struct PlayerCharacter : Actor
+ static_assert(offsetof(PlayerCharacter, objectives) == 0x590);
+ static_assert(offsetof(PlayerCharacter, pSkills) == 0x9C0);
+ static_assert(offsetof(PlayerCharacter, locationForm) == 0xAD8);
++static_assert(offsetof(PlayerCharacter, difficulty) == 0xB08);
+ static_assert(offsetof(PlayerCharacter, baseTints) == 0xB20);
+ static_assert(offsetof(PlayerCharacter, overlayTints) == 0xB38);
+ static_assert(sizeof(PlayerCharacter) == 0xBF0);
 diff --git a/Code/client/Games/Skyrim/TESObjectREFR.cpp b/Code/client/Games/Skyrim/TESObjectREFR.cpp
 index e585269..918e31c 100644
 --- a/Code/client/Games/Skyrim/TESObjectREFR.cpp
@@ -721,6 +1207,32 @@ index 0000000..b32d290
 +    entt::scoped_connection m_follower;
 +    entt::scoped_connection m_connected, m_disconnected, m_interaction, m_notify, m_update;
 +};
+diff --git a/Code/client/Services/Debug/Views/QuestDebugView.cpp b/Code/client/Services/Debug/Views/QuestDebugView.cpp
+index 383f6e3..b5e1bc1 100644
+--- a/Code/client/Services/Debug/Views/QuestDebugView.cpp
++++ b/Code/client/Services/Debug/Views/QuestDebugView.cpp
+@@ -29,7 +29,7 @@ void DebugService::DrawQuestDebugView()
+     {
+         Set<uint32_t> foundQuests{};
+ 
+-        for (auto& objective : pPlayer->objectives)
++        for (const auto& objective : pPlayer->GetObjectives())
+         {
+             TESQuest* pQuest = objective.instance->quest;
+             if (!pQuest)
+diff --git a/Code/client/Services/Debug/Views/SkillView.cpp b/Code/client/Services/Debug/Views/SkillView.cpp
+index 8e52f24..98dec51 100644
+--- a/Code/client/Services/Debug/Views/SkillView.cpp
++++ b/Code/client/Services/Debug/Views/SkillView.cpp
+@@ -9,7 +9,7 @@ void DebugService::DrawSkillView()
+     ImGui::Begin("Skills");
+ 
+     PlayerCharacter* pPlayer = PlayerCharacter::Get();
+-    Skills* pSkills = *pPlayer->pSkills;
++    Skills* pSkills = pPlayer->GetSkills();
+ 
+     ImGui::InputFloat("Global XP", &pSkills->xp, 0, 0, "%.3f", ImGuiInputTextFlags_ReadOnly);
+     ImGui::InputFloat("Global level threshold", &pSkills->levelThreshold, 0, 0, "%.3f", ImGuiInputTextFlags_ReadOnly);
 diff --git a/Code/client/Services/Generic/CalendarService.cpp b/Code/client/Services/Generic/CalendarService.cpp
 index 585d034..baafc3a 100644
 --- a/Code/client/Services/Generic/CalendarService.cpp
@@ -823,7 +1335,7 @@ index 585d034..baafc3a 100644
 +}
 diff --git a/Code/client/Services/Generic/CampaignCheckpointService.cpp b/Code/client/Services/Generic/CampaignCheckpointService.cpp
 new file mode 100644
-index 0000000..4e8addd
+index 0000000..079fa8e
 --- /dev/null
 +++ b/Code/client/Services/Generic/CampaignCheckpointService.cpp
 @@ -0,0 +1,193 @@
@@ -894,7 +1406,7 @@ index 0000000..4e8addd
 +    m_stop.store(true);m_wake.notify_all();
 +    if(m_setHead)m_setHead(m_generation,m_epoch.c_str(),head.c_str(),revision);
 +    CampaignService::CheckpointPhase(0);
-+    if(m_openedJournal)UI::CheckpointJournal(false);
++    UI::FinishCheckpointJournal(m_openedJournal);
 +    m_phase.clear();m_proposal.clear();m_readySent=false;m_openedJournal=false;
 +    spdlog::info("Co-op checkpoint {}",committed?"committed":"cancelled; previous checkpoint retained");
 +}
@@ -1022,7 +1534,7 @@ index 0000000..4e8addd
 +}
 diff --git a/Code/client/Services/Generic/CampaignService.cpp b/Code/client/Services/Generic/CampaignService.cpp
 new file mode 100644
-index 0000000..fcf07d1
+index 0000000..1515c28
 --- /dev/null
 +++ b/Code/client/Services/Generic/CampaignService.cpp
 @@ -0,0 +1,467 @@
@@ -1413,9 +1925,9 @@ index 0000000..fcf07d1
 +        m_nextProgressCheck = Now() + 250;
 +        CampaignSave::Snapshot loaded;
 +        auto* player = PlayerCharacter::Get();
-+        if (player && player->pSkills && *player->pSkills && m_saveRead(&loaded, sizeof(loaded)) && loaded.Status == CampaignSave::Ready)
++        auto* skills = player ? player->GetSkills() : nullptr;
++        if (skills && m_saveRead(&loaded, sizeof(loaded)) && loaded.Status == CampaignSave::Ready)
 +        {
-+            const auto* skills = *player->pSkills;
 +            std::array<float,38> progress{};
 +            progress[0] = static_cast<float>(player->GetLevel()); progress[1] = skills->xp;
 +            for (size_t i = 0; i < 18; ++i) { progress[2+i*2] = skills->skills[i].level; progress[3+i*2] = skills->skills[i].xp; }
@@ -1494,7 +2006,7 @@ index 0000000..fcf07d1
 +    }
 +}
 diff --git a/Code/client/Services/Generic/CharacterService.cpp b/Code/client/Services/Generic/CharacterService.cpp
-index 7d3ac21..56b4f31 100644
+index 7d3ac21..d8089e2 100644
 --- a/Code/client/Services/Generic/CharacterService.cpp
 +++ b/Code/client/Services/Generic/CharacterService.cpp
 @@ -500,6 +500,16 @@ void CharacterService::OnCharacterSpawn(const CharacterSpawnRequest& acMessage)
@@ -1514,8 +2026,41 @@ index 7d3ac21..56b4f31 100644
      auto remoteView = m_world.view<RemoteComponent>();
      const auto remoteItor = std::find_if(std::begin(remoteView), std::end(remoteView), [remoteView, Id = acMessage.ServerId](auto entity) { return remoteView.get<RemoteComponent>(entity).Id == Id; });
  
+@@ -1424,7 +1434,7 @@ void CharacterService::RequestServerAssignment(const entt::entity aEntity) const
+         auto& questLog = message.QuestContent.Entries;
+         auto& modSystem = m_world.GetModSystem();
+ 
+-        for (const auto& objective : PlayerCharacter::Get()->objectives)
++        for (const auto& objective : PlayerCharacter::Get()->GetObjectives())
+         {
+             auto* pQuest = objective.instance->quest;
+             if (!pQuest)
+diff --git a/Code/client/Services/Generic/DiscordService.cpp b/Code/client/Services/Generic/DiscordService.cpp
+index aaea6a3..acbf2c6 100644
+--- a/Code/client/Services/Generic/DiscordService.cpp
++++ b/Code/client/Services/Generic/DiscordService.cpp
+@@ -49,14 +49,16 @@ void DiscordService::OnUserUpdate(void* userp)
+ 
+ void DiscordService::OnLocationChangeEvent() noexcept
+ {
++    if (!m_pActivity || m_bCustomPresence)
++        return;
++
+     auto* pPlayer = PlayerCharacter::Get();
+ 
+     // we'll disable this inbuilt location tracker
+     // in case the user requests a custom discord presence
+-    if (!m_bCustomPresence && pPlayer)
++    if (pPlayer)
+     {
+-        // auto *pLocation = pPlayer->GetCurrentLocation();
+-        auto* pLocation = pPlayer->locationForm;
++        auto* pLocation = pPlayer->GetCurrentLocation();
+         auto* pWorldspace = pPlayer->GetWorldSpace();
+         bool updateTimestamp = false;
+ 
 diff --git a/Code/client/Services/Generic/DiscoveryService.cpp b/Code/client/Services/Generic/DiscoveryService.cpp
-index cea7919..6a99ac8 100644
+index cea7919..7611fa5 100644
 --- a/Code/client/Services/Generic/DiscoveryService.cpp
 +++ b/Code/client/Services/Generic/DiscoveryService.cpp
 @@ -1,6 +1,7 @@
@@ -1526,7 +2071,32 @@ index cea7919..6a99ac8 100644
  #include <Games/TES.h>
  
  #include <Games/References.h>
-@@ -296,6 +297,11 @@ void DiscoveryService::OnConnected(const ConnectedEvent& acEvent) noexcept
+@@ -60,7 +61,7 @@ DiscoveryService::DiscoveryService(World& aWorld, entt::dispatcher& aDispatcher)
+ 
+ void DiscoveryService::VisitCell(bool aForceTrigger) noexcept
+ {
+-    const PlayerCharacter* pPlayer = PlayerCharacter::Get();
++    PlayerCharacter* pPlayer = PlayerCharacter::Get();
+     if (!pPlayer)
+         return;
+ 
+@@ -69,11 +70,12 @@ void DiscoveryService::VisitCell(bool aForceTrigger) noexcept
+     else if (pPlayer->GetParentCellEx())
+         VisitInteriorCell(aForceTrigger);
+ 
+-    // exactly how the game does it too
+-    if (m_pLocation != pPlayer->locationForm)
++    // Use the existing engine getter instead of a version-specific player offset.
++    auto* pLocation = pPlayer->GetCurrentLocation();
++    if (m_pLocation != pLocation)
+     {
+         m_dispatcher.trigger(LocationChangeEvent());
+-        m_pLocation = pPlayer->locationForm;
++        m_pLocation = pLocation;
+     }
+ }
+ 
+@@ -296,6 +298,11 @@ void DiscoveryService::OnConnected(const ConnectedEvent& acEvent) noexcept
  
  BSTEventResult DiscoveryService::OnEvent(const TESLoadGameEvent*, const EventDispatcher<TESLoadGameEvent>*)
  {
@@ -1539,7 +2109,7 @@ index cea7919..6a99ac8 100644
  
  #if (IS_MASTER)
 diff --git a/Code/client/Services/Generic/InventoryService.cpp b/Code/client/Services/Generic/InventoryService.cpp
-index 8d9f2c7..ec23246 100644
+index 8d9f2c7..597cc59 100644
 --- a/Code/client/Services/Generic/InventoryService.cpp
 +++ b/Code/client/Services/Generic/InventoryService.cpp
 @@ -10,6 +10,8 @@
@@ -1583,7 +2153,7 @@ index 8d9f2c7..ec23246 100644
      request.UpdateClients = acEvent.UpdateClients;
  
      m_transport.Send(request);
-@@ -147,6 +160,47 @@ void InventoryService::OnEquipmentChangeEvent(const EquipmentChangeEvent& acEven
+@@ -147,6 +160,51 @@ void InventoryService::OnEquipmentChangeEvent(const EquipmentChangeEvent& acEven
  
  void InventoryService::OnNotifyInventoryChanges(const NotifyInventoryChanges& acMessage) noexcept
  {
@@ -1598,7 +2168,10 @@ index 8d9f2c7..ec23246 100644
 +                return;
 +            it.value().Pending = false;
 +            if (!acMessage.ClaimId || acMessage.Item.Count <= 0)
++            {
++                spdlog::warn("[DroppedItem] Pickup claim {} for drop {} rejected; original reference {:X} retained", acMessage.ClaimId, acMessage.DroppedId, it.value().FormId);
 +                return;
++            }
 +            const uint32_t cPicker = static_cast<uint32_t>(acMessage.ClaimId >> 32);
 +            if (cPicker != acMessage.ServerId || m_appliedClaims.contains(acMessage.ClaimId))
 +                return;
@@ -1617,6 +2190,7 @@ index 8d9f2c7..ec23246 100644
 +            ScopedActivateOverride activation;
 +            pPicker->PickUpObject(pObject, acMessage.Item.Count, false, 0.f);
 +        }
++        spdlog::info("[DroppedItem] Applied claim {} for drop {}, count {}, reference {:X}", acMessage.ClaimId, acMessage.DroppedId, acMessage.Item.Count, formId);
 +        std::lock_guard lock(m_dropMutex);
 +        m_appliedClaims.insert(acMessage.ClaimId);
 +        const auto it = m_drops.find(acMessage.DroppedId);
@@ -1631,7 +2205,7 @@ index 8d9f2c7..ec23246 100644
      if (acMessage.OwnershipEpoch != 0)
      {
          Actor* pActor = nullptr;
-@@ -182,7 +236,21 @@ void InventoryService::OnNotifyInventoryChanges(const NotifyInventoryChanges& ac
+@@ -182,7 +240,21 @@ void InventoryService::OnNotifyInventoryChanges(const NotifyInventoryChanges& ac
          ScopedInventoryOverride _;
  
          if (acMessage.Drop)
@@ -1654,7 +2228,7 @@ index 8d9f2c7..ec23246 100644
          else
              pActor->AddOrRemoveItem(acMessage.Item);
  
-@@ -322,3 +390,99 @@ void InventoryService::RunWeaponStateUpdates() noexcept
+@@ -322,3 +394,101 @@ void InventoryService::RunWeaponStateUpdates() noexcept
          }
      }
  }
@@ -1704,6 +2278,7 @@ index 8d9f2c7..ec23246 100644
 +    request.ClaimId = (uint64_t{request.ServerId} << 32) | m_nextClaim++;
 +    request.Item = it.value().Item;
 +    request.Item.Count = acEvent.Count;
++    spdlog::info("[DroppedItem] Request claim {} for drop {}, count {}", request.ClaimId, request.DroppedId, request.Item.Count);
 +    m_transport.Send(request);
 +}
 +
@@ -1745,6 +2320,7 @@ index 8d9f2c7..ec23246 100644
 +    reference.Item.ExtraWorn = reference.Item.ExtraWornLeft = false;
 +    const uint64_t cId = reference.Id;
 +    m_drops.emplace(cId, std::move(reference));
++    spdlog::info("[DroppedItem] Track original drop {} reference {:X}, count {}", cId, apDropped->formID, -acItem.Count);
 +    return cId;
 +}
 +
@@ -1822,10 +2398,10 @@ index b2140e2..a91a56b 100644
  
 diff --git a/Code/client/Services/Generic/PartyRestService.cpp b/Code/client/Services/Generic/PartyRestService.cpp
 new file mode 100644
-index 0000000..113597d
+index 0000000..9276939
 --- /dev/null
 +++ b/Code/client/Services/Generic/PartyRestService.cpp
-@@ -0,0 +1,248 @@
+@@ -0,0 +1,316 @@
 +#include <Services/PartyRestService.h>
 +#include <Services/CalendarService.h>
 +#include <World.h>
@@ -1848,6 +2424,8 @@ index 0000000..113597d
 +std::atomic<float> PartyRestService::s_pendingHours{0.f};
 +std::atomic<bool> PartyRestService::s_isLeader{false};
 +std::atomic<bool> PartyRestService::s_connected{false};
++std::atomic<bool> PartyRestService::s_scriptSnapshotRequested{false};
++std::atomic<bool> PartyRestService::s_scriptReady{false};
 +
 +PartyRestService::PartyRestService(World& aWorld, entt::dispatcher& aDispatcher, TransportService& aTransport)
 +    : m_world(aWorld), m_transport(aTransport)
@@ -1859,6 +2437,17 @@ index 0000000..113597d
 +}
 +float PartyRestService::Exchange(float aCommand) noexcept
 +{
++    if (aCommand == -8.f)
++        return s_scriptSnapshotRequested.load() ? 1.f : 0.f;
++    if (aCommand == -9.f)
++    {
++        if (s_scriptSnapshotRequested.load())
++        {
++            if (!s_scriptReady.exchange(true))
++                spdlog::info("[PartyRest] Local need snapshot ready");
++        }
++        return 0.f;
++    }
 +    if (aCommand == -7.f)
 +        return static_cast<float>(s_pendingBenefit.exchange(0));
 +    if (aCommand == -6.f)
@@ -1866,7 +2455,12 @@ index 0000000..113597d
 +    if (aCommand == -3.f)
 +        return s_isLeader.load() ? 1.f : 0.f;
 +    if (aCommand == 0.f)
-+        return s_pendingHours.exchange(0.f);
++    {
++        const float cHours = s_pendingHours.exchange(0.f);
++        if (cHours > 0.f)
++            s_scriptSnapshotRequested.store(false);
++        return cHours;
++    }
 +    if (std::isfinite(aCommand))
 +        World::Get().GetRunner().Trigger(PartyRestCommandEvent{aCommand});
 +    return 0.f;
@@ -1896,16 +2490,34 @@ index 0000000..113597d
 +        return;
 +    if (acEvent.Command >= 1.f && acEvent.Command <= 24.f)
 +    {
++        if (m_localRest || m_session || s_pendingHours.load() > 0.f)
++            return;
 +        CaptureTimedEffects();
 +        m_localRest = true;
++        m_finishPending = false;
++        m_cancelPending = false;
 +        Send(static_cast<uint8_t>(PartyRestAction::Begin), acEvent.Command);
 +    }
-+    else if (m_session && acEvent.Command >= -13.f && acEvent.Command <= -10.f)
-+        Send(static_cast<uint8_t>(PartyRestAction::Finish), 0.f, static_cast<uint8_t>(-acEvent.Command - 10.f));
-+    else if (m_session && acEvent.Command == -1.f)
-+        Send(static_cast<uint8_t>(PartyRestAction::Finish));
-+    else if (m_session && acEvent.Command == -2.f)
-+        Send(static_cast<uint8_t>(PartyRestAction::Cancel));
++    else if (m_localRest && (acEvent.Command == -1.f || (acEvent.Command >= -13.f && acEvent.Command <= -10.f)))
++    {
++        m_finishBenefit = acEvent.Command == -1.f ? 0 : static_cast<uint8_t>(-acEvent.Command - 10.f);
++        // Sleep can end before the server's Begin receipt reaches this client.
++        m_finishPending = true;
++        if (m_session)
++        {
++            Send(static_cast<uint8_t>(PartyRestAction::Finish), 0.f, m_finishBenefit);
++            m_finishPending = false;
++        }
++    }
++    else if (m_localRest && acEvent.Command == -2.f)
++    {
++        // Retain cancellation until Begin supplies the session ID as well.
++        m_localRest = false;
++        m_finishPending = false;
++        m_cancelPending = !m_session;
++        if (m_session)
++            Send(static_cast<uint8_t>(PartyRestAction::Cancel));
++    }
 +}
 +void PartyRestService::OnNotify(const NotifyPartyRest& acMessage) noexcept
 +{
@@ -1913,19 +2525,41 @@ index 0000000..113597d
 +        return;
 +    if (acMessage.Action == PartyRestAction::Begin && acMessage.Session > m_lastReceipt)
 +    {
++        if (m_session || s_pendingHours.load() > 0.f)
++            return;
 +        if (!m_localRest)
 +            CaptureTimedEffects();
 +        m_session = acMessage.Session;
 +        m_nextReport = 0;
++        if (m_cancelPending)
++        {
++            Send(static_cast<uint8_t>(PartyRestAction::Cancel));
++            m_cancelPending = false;
++            return;
++        }
++        s_scriptReady.store(false);
++        s_scriptSnapshotRequested.store(true);
++        spdlog::info("[PartyRest] Begin session {} for {} hours", m_session, acMessage.Hours);
++        if (m_finishPending)
++        {
++            Send(static_cast<uint8_t>(PartyRestAction::Finish), 0.f, m_finishBenefit);
++            m_finishPending = false;
++        }
 +    }
 +    else if (acMessage.Action == PartyRestAction::Cancel && acMessage.Session == m_session)
 +    {
++        m_lastReceipt = acMessage.Session;
 +        m_session = 0;
 +        m_localRest = false;
++        m_finishPending = false;
++        m_cancelPending = false;
++        s_scriptSnapshotRequested.store(false);
++        s_scriptReady.store(false);
 +        m_timedEffects.clear();
++        spdlog::info("[PartyRest] Cancel session {}", acMessage.Session);
 +    }
 +    else if (acMessage.Action == PartyRestAction::Complete && acMessage.Session == m_session
-+        && acMessage.Session > m_lastReceipt && std::isfinite(acMessage.Hours) && acMessage.Hours >= 1.f && acMessage.Hours <= 24.f)
++        && acMessage.Session > m_lastReceipt && acMessage.AdvanceTime && std::isfinite(acMessage.Hours) && acMessage.Hours >= 1.f && acMessage.Hours <= 24.f)
 +    {
 +        if (acMessage.AdvanceTime)
 +        {
@@ -1939,6 +2573,7 @@ index 0000000..113597d
 +        s_pendingHours.fetch_add(acMessage.Hours);
 +        m_lastReceipt = acMessage.Session;
 +        m_session = 0;
++        spdlog::info("[PartyRest] Complete session {} for {} hours", acMessage.Session, acMessage.Hours);
 +    }
 +}
 +void PartyRestService::OnUpdate(const UpdateEvent&) noexcept
@@ -1960,14 +2595,18 @@ index 0000000..113597d
 +    s_connected.store(m_transport.IsConnected());
 +    s_isLeader.store(m_transport.IsConnected() && m_world.GetPartyService().IsLeader());
 +    if (!m_world.GetPartyService().IsInParty())
-+        s_pendingHours.store(0.f);
-+    if (!m_session || !m_transport.IsConnected())
-+        return;
-+    if (!m_world.GetPartyService().IsInParty())
 +    {
++        s_pendingHours.store(0.f);
++        s_pendingBenefit.store(0);
++        s_scriptSnapshotRequested.store(false);
++        s_scriptReady.store(false);
 +        m_session = 0;
++        m_localRest = m_finishPending = m_cancelPending = false;
++        m_timedEffects.clear();
 +        return;
 +    }
++    if (!m_session || !m_transport.IsConnected())
++        return;
 +    const uint64_t cNow = m_world.GetTick();
 +    if (cNow < m_nextReport)
 +        return;
@@ -1975,6 +2614,7 @@ index 0000000..113597d
 +    const PlayerCharacter* pPlayer = PlayerCharacter::Get();
 +    const UI* pUI = UI::Get();
 +    const bool cSafe = pPlayer && pUI && !pPlayer->IsDead() && !pPlayer->IsInCombat()
++        && s_scriptReady.load()
 +        && !pUI->GetMenuOpen(BSFixedString("Loading Menu"))
 +        && !pUI->GetMenuOpen(BSFixedString("Dialogue Menu"));
 +    Send(static_cast<uint8_t>(cSafe ? PartyRestAction::Ready : PartyRestAction::Unsafe));
@@ -1989,11 +2629,15 @@ index 0000000..113597d
 +        s_displayQueue.clear();
 +    }
 +    m_localRest = false;
++    m_finishPending = false;
++    m_cancelPending = false;
 +    m_timedEffects.clear();
 +    s_pendingHours.store(0.f);
 +    s_pendingBenefit.store(0);
 +    s_isLeader.store(false);
 +    s_connected.store(false);
++    s_scriptSnapshotRequested.store(false);
++    s_scriptReady.store(false);
 +}
 +
 +void PartyRestService::CaptureTimedEffects() noexcept
@@ -2226,12 +2870,43 @@ index cff53bb..b9a572c 100644
      /**
       * Checks whether local actors their weapon draw states have changed,
       * and if so, send the new states to the server.
+diff --git a/Code/client/Services/PapyrusService.h b/Code/client/Services/PapyrusService.h
+index 13737da..f94bb60 100644
+--- a/Code/client/Services/PapyrusService.h
++++ b/Code/client/Services/PapyrusService.h
+@@ -35,7 +35,7 @@ template <class Return, class Type, class... Args> struct PapyrusFunction
+     {
+     }
+ 
+-    Return operator()(const Type* apThis, Args... args) const noexcept { return m_pFunction(GameVM::Get()->virtualMachine, 0, apThis, std::forward<Args>(args)...); }
++    Return operator()(const Type* apThis, Args... args) const noexcept { return m_pFunction(GameVM::Get()->GetVirtualMachine(), 0, apThis, std::forward<Args>(args)...); }
+ 
+ private:
+     TFunction m_pFunction;
+@@ -50,7 +50,7 @@ template <class Return, class... Args> struct GlobalPapyrusFunction
+     {
+     }
+ 
+-    Return operator()(Args... args) const noexcept { return m_pFunction(GameVM::Get()->virtualMachine, std::forward<Args>(args)...); }
++    Return operator()(Args... args) const noexcept { return m_pFunction(GameVM::Get()->GetVirtualMachine(), std::forward<Args>(args)...); }
+ 
+ private:
+     TFunction m_pFunction;
+@@ -76,7 +76,7 @@ template <class Return, class Type, class... Args> struct LatentPapyrusFunction
+     {
+         RefrOrInventoryObj self{apThis, nullptr, 0};
+ 
+-        return m_pFunction(GameVM::Get()->virtualMachine, 0, self, std::forward<Args>(args)...);
++        return m_pFunction(GameVM::Get()->GetVirtualMachine(), 0, self, std::forward<Args>(args)...);
+     }
+ 
+ private:
 diff --git a/Code/client/Services/PartyRestService.h b/Code/client/Services/PartyRestService.h
 new file mode 100644
-index 0000000..b76f840
+index 0000000..63d7db1
 --- /dev/null
 +++ b/Code/client/Services/PartyRestService.h
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,61 @@
 +#pragma once
 +#include <atomic>
 +#include <mutex>
@@ -2269,6 +2944,9 @@ index 0000000..b76f840
 +    Vector<TimedEffect> m_timedEffects;
 +    float m_restTimeScale{};
 +    bool m_localRest{};
++    bool m_finishPending{};
++    bool m_cancelPending{};
++    uint8_t m_finishBenefit{};
 +    World& m_world;
 +    TransportService& m_transport;
 +    uint64_t m_session{};
@@ -2283,6 +2961,8 @@ index 0000000..b76f840
 +    static std::atomic<float> s_pendingHours;
 +    static std::atomic<bool> s_isLeader;
 +    static std::atomic<bool> s_connected;
++    static std::atomic<bool> s_scriptSnapshotRequested;
++    static std::atomic<bool> s_scriptReady;
 +    entt::scoped_connection m_commandConnection;
 +    entt::scoped_connection m_notifyConnection;
 +    entt::scoped_connection m_updateConnection;
@@ -2300,6 +2980,42 @@ index 2ef91ac..a7d58a4 100644
      bool Send(const ClientMessage& acMessage, TiltedPhoques::EPacketFlags aPacketFlags = TiltedPhoques::kReliable) const noexcept;
  
      void OnConsume(const void* apData, uint32_t aSize) override;
+diff --git a/Code/client/SkyrimVM64.cpp b/Code/client/SkyrimVM64.cpp
+index 8e96a9e..16a2730 100644
+--- a/Code/client/SkyrimVM64.cpp
++++ b/Code/client/SkyrimVM64.cpp
+@@ -1,6 +1,7 @@
+ #include <TiltedOnlinePCH.h>
+ #include "TiltedOnlineApp.h"
+ #include <Misc/GameVM.h>
++#include <Interface/UI.h>
+ 
+ extern std::unique_ptr<TiltedOnlineApp> g_appInstance;
+ 
+@@ -16,7 +17,7 @@ static TVMDestructor* VMDestructor = nullptr;
+ 
+ int TP_MAKE_THISCALL(HookVMUpdate, GameVM, float a2)
+ {
+-    if (apThis->inactive == 0)
++    if (!apThis->IsInactive())
+         g_appInstance->Update();
+ 
+     return TiltedPhoques::ThisCall(VMUpdate, apThis, a2);
+@@ -26,7 +27,13 @@ short TP_MAKE_THISCALL(HookMainLoop, Main)
+ {
+     TP_EMPTY_HOOK_PLACEHOLDER
+ 
+-    return TiltedPhoques::ThisCall(MainLoop, apThis);
++    auto* pUI = UI::Get();
++    const bool cEngineProcessesUI = !pUI || pUI->numPausesGame != 0
++        || *(reinterpret_cast<const uint8_t*>(apThis) + 0x16) != 0;
++    const short cResult = TiltedPhoques::ThisCall(MainLoop, apThis);
++    // 1170 Main+16 is the inactive/loading flag tested by the original UI path.
++    UI::ProcessUnpausedMenus(cEngineProcessesUI || *(reinterpret_cast<const uint8_t*>(apThis) + 0x16) != 0);
++    return cResult;
+ }
+ 
+ uintptr_t TP_MAKE_THISCALL(HookVMDestructor, void)
 diff --git a/Code/client/Systems/InterpolationSystem.cpp b/Code/client/Systems/InterpolationSystem.cpp
 index e5fdb7e..8d250fd 100644
 --- a/Code/client/Systems/InterpolationSystem.cpp
@@ -4253,7 +4969,7 @@ index 78b2cc9..780ffe6 100644
  
      void OnUpdate(const UpdateEvent& acEvent) const noexcept;
 diff --git a/Code/server/Services/InventoryService.cpp b/Code/server/Services/InventoryService.cpp
-index 2d7d0f0..6b37794 100644
+index 2d7d0f0..406a297 100644
 --- a/Code/server/Services/InventoryService.cpp
 +++ b/Code/server/Services/InventoryService.cpp
 @@ -1,3 +1,4 @@
@@ -4324,7 +5040,7 @@ index 2d7d0f0..6b37794 100644
                  return;
              }
          }
-@@ -75,22 +99,81 @@ void InventoryService::OnInventoryChanges(const PacketEvent<RequestInventoryChan
+@@ -75,22 +99,94 @@ void InventoryService::OnInventoryChanges(const PacketEvent<RequestInventoryChan
          spdlog::warn(
              "Rejected inventory change from player {:X} because object {:X} unexpectedly carried ownership epoch {}",
              acMessage.pPlayer->GetId(), message.ServerId, message.OwnershipEpoch);
@@ -4335,6 +5051,7 @@ index 2d7d0f0..6b37794 100644
      auto& inventoryComponent = view.get<InventoryComponent>(*it);
 -    inventoryComponent.Content.AddOrRemoveEntry(message.Item);
 +    Inventory::Entry transaction = message.Item;
++    bool broadcastReference = false;
 +    if (message.DroppedId && !message.Drop)
 +    {
 +        NotifyInventoryChanges denied;
@@ -4351,10 +5068,12 @@ index 2d7d0f0..6b37794 100644
 +            || isRemoteNpcInteraction || message.Item.Count <= 0 || message.Item.Count > dropped.value().Item.Count
 +            || !acMessage.pPlayer->GetCellComponent().IsInRange(dropCell, false))
 +        {
++            spdlog::warn("[DroppedItem] Rejected claim {} for drop {} (known: {}, count: {})", message.ClaimId, message.DroppedId, dropped != m_drops.end(), message.Item.Count);
 +            acMessage.pPlayer->Send(denied);
 +            return;
 +        }
 +        m_lastClaim[message.ServerId] = cClaim;
++        broadcastReference = dropped.value().Replicated;
 +        // Ignore client-supplied enchantment/temper metadata for a claimed item.
 +        transaction = dropped->second.Item;
 +        transaction.Count = message.Item.Count;
@@ -4365,6 +5084,7 @@ index 2d7d0f0..6b37794 100644
 +        }
 +        if (!dropped.value().Item.Count)
 +            m_drops.erase(dropped);
++        spdlog::info("[DroppedItem] Accepted claim {} for drop {}, count {}", message.ClaimId, message.DroppedId, transaction.Count);
 +    }
 +    else if (message.Drop && message.DroppedId)
 +    {
@@ -4374,18 +5094,20 @@ index 2d7d0f0..6b37794 100644
 +            || isRemoteNpcInteraction)
 +            return;
 +        m_lastDrop[message.ServerId] = cSequence;
-+        if (bEnableItemDrops)
-+        {
-+            DroppedItem dropped;
-+            dropped.Item = message.Item;
-+            dropped.Item.Count = -message.Item.Count;
-+            dropped.Item.ExtraWorn = dropped.Item.ExtraWornLeft = false;
-+            const auto& cell = acMessage.pPlayer->GetCellComponent();
-+            dropped.Cell = cell.Cell;
-+            dropped.WorldSpace = cell.WorldSpaceId;
-+            dropped.Coords = cell.CenterCoords;
-+            m_drops.emplace(message.DroppedId, std::move(dropped));
-+        }
++        // The origin always tracks its real dropped reference for pickup claims.
++        // Disabling remote replicas must not disable that claim's server record.
++        DroppedItem dropped;
++        dropped.Item = message.Item;
++        dropped.Item.Count = -message.Item.Count;
++        dropped.Item.ExtraWorn = dropped.Item.ExtraWornLeft = false;
++        dropped.Replicated = bEnableItemDrops;
++        broadcastReference = dropped.Replicated;
++        const auto& cell = acMessage.pPlayer->GetCellComponent();
++        dropped.Cell = cell.Cell;
++        dropped.WorldSpace = cell.WorldSpaceId;
++        dropped.Coords = cell.CenterCoords;
++        m_drops.emplace(message.DroppedId, std::move(dropped));
++        spdlog::info("[DroppedItem] Registered drop {}, count {}, replicated: {}", message.DroppedId, -message.Item.Count, broadcastReference);
 +    }
 +    if (transaction.Count != 0) m_world.ctx().at<CampaignService>().NoteWorldChange();
 +    inventoryComponent.Content.AddOrRemoveEntry(transaction);
@@ -4403,14 +5125,21 @@ index 2d7d0f0..6b37794 100644
 +    notify.ClaimId = message.ClaimId;
  
 -    notify.Drop = bEnableItemDrops && !isRemoteNpcInteraction ? message.Drop : false;
-+    notify.Drop = bEnableItemDrops && message.DroppedId && !isRemoteNpcInteraction ? message.Drop : false;
++    notify.Drop = broadcastReference && message.Drop;
  
 +    if (message.ClaimId)
 +        acMessage.pPlayer->Send(notify);
++    // Peers without a ground replica still need the actor inventory delta.
++    // A nonzero drop ID would route it into their missing-reference claim path.
++    if (!broadcastReference)
++    {
++        notify.DroppedId = 0;
++        notify.ClaimId = 0;
++    }
      const entt::entity cOrigin = static_cast<entt::entity>(message.ServerId);
      if (!GameServer::Get()->SendToPlayersInRange(notify, cOrigin, acMessage.GetSender()))
          spdlog::error("{}: SendToPlayersInRange failed", __FUNCTION__);
-@@ -99,7 +182,6 @@ void InventoryService::OnInventoryChanges(const PacketEvent<RequestInventoryChan
+@@ -99,7 +195,6 @@ void InventoryService::OnInventoryChanges(const PacketEvent<RequestInventoryChan
  void InventoryService::OnEquipmentChanges(const PacketEvent<RequestEquipmentChanges>& acMessage) noexcept
  {
      auto& message = acMessage.Packet;
@@ -4419,7 +5148,7 @@ index 2d7d0f0..6b37794 100644
  
      const auto it = view.find(static_cast<entt::entity>(message.ServerId));
 diff --git a/Code/server/Services/InventoryService.h b/Code/server/Services/InventoryService.h
-index 3e9a26f..09f11bb 100644
+index 3e9a26f..a72b4df 100644
 --- a/Code/server/Services/InventoryService.h
 +++ b/Code/server/Services/InventoryService.h
 @@ -1,6 +1,8 @@
@@ -4439,7 +5168,7 @@ index 3e9a26f..09f11bb 100644
      InventoryService(World& aWorld, entt::dispatcher& aDispatcher);
  
      /**
-@@ -32,6 +35,16 @@ public:
+@@ -32,6 +35,17 @@ public:
      void OnWeaponDrawnRequest(const PacketEvent<DrawWeaponRequest>& acMessage) noexcept;
  
  private:
@@ -4449,6 +5178,7 @@ index 3e9a26f..09f11bb 100644
 +        GameId Cell{};
 +        GameId WorldSpace{};
 +        GridCellCoords Coords{};
++        bool Replicated{};
 +    };
 +    Map<uint64_t, DroppedItem> m_drops;
 +    Map<uint32_t, uint32_t> m_lastDrop;
@@ -4492,10 +5222,10 @@ index 2bd7d15..7636240 100644
  }
 diff --git a/Code/server/Services/PartyRestService.cpp b/Code/server/Services/PartyRestService.cpp
 new file mode 100644
-index 0000000..465e0ab
+index 0000000..096616e
 --- /dev/null
 +++ b/Code/server/Services/PartyRestService.cpp
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,142 @@
 +#include <Services/PartyRestService.h>
 +#include <World.h>
 +#include <GameServer.h>
@@ -4562,6 +5292,7 @@ index 0000000..465e0ab
 +        for (Player* pMember : pParty->Members)
 +            session.Members.push_back(pMember->GetId());
 +        m_sessions.emplace(cLeader, session);
++        spdlog::info("[PartyRest] Begin session {}: {} hours, {} members", session.Id, session.Hours, session.Members.size());
 +        Broadcast(session, PartyRestAction::Begin);
 +        return;
 +    }
@@ -4587,6 +5318,7 @@ index 0000000..465e0ab
 +            session.Deadline = cNow + 10000;
 +            // Require new safety acknowledgements after the sleeper wakes.
 +            session.ReadyAt.clear();
++            spdlog::info("[PartyRest] Sleeper finished session {}; awaiting fresh safety reports", session.Id);
 +        }
 +        break;
 +    case PartyRestAction::Cancel:
@@ -4630,7 +5362,9 @@ index 0000000..465e0ab
 +            advance = advance && std::find(session.Members.begin(), session.Members.end(), pPlayer->GetId()) != session.Members.end();
 +        if (advance)
 +            advance = m_world.GetCalendarService().AdvanceRestHours(session.Hours);
-+        Broadcast(session, PartyRestAction::Complete, advance);
++        // No benefits receipt unless the canonical clock actually advanced.
++        spdlog::info("[PartyRest] Session {} clock advancement {}", session.Id, advance ? "accepted" : "rejected");
++        Broadcast(session, advance ? PartyRestAction::Complete : PartyRestAction::Cancel, advance);
 +        it = m_sessions.erase(it);
 +    }
 +}
@@ -4893,15 +5627,347 @@ index 0000000..acd7001
 +    NotifyCampaignCheckpoint response;response.RequestId=request.RequestId;response.Payload="ack";
 +    RoundTrip<NotifyCampaignCheckpoint,ServerMessageFactory>(response);
 +}
+diff --git a/lab/LoreRimLANRest/RECOVERY-STATUS.md b/lab/LoreRimLANRest/RECOVERY-STATUS.md
+new file mode 100644
+index 0000000..58d5616
+--- /dev/null
++++ b/lab/LoreRimLANRest/RECOVERY-STATUS.md
+@@ -0,0 +1,293 @@
++# 1170 startup and rest recovery, October 23, 2026
++
++Build identity: `lorerim-rest-recovery-v0.6`. Experimental; host sleep acceptance
++is pending. Do not deploy this as a finished campaign update.
++
++## Startup evidence
++
++The failing launcher SHA256 was
++`b19f3afb09c69831a2d0649ec328519ab7e21a9dc6bbdce629acbdb86d82df4a`.
++Its instruction at `0x180633CCD` loads `[rax+0x210]`; the call at
++`0x180633CE1` then uses virtual slot `+0x48`. Source inspection ties this
++sequence to the Actor-type lookup in the initial Papyrus function registration.
++
++Read-only process inspection of the working 1.6.1170 runtime found:
++
++- SkyrimVM at `0x143188440`, via Address Library ID 400475.
++- `+0x200`: VM implementation; vtable `0x141AA0B48`, slot 09 target `0x141444F70`.
++- `+0x210`: debug interface; vtable `0x141AA0E20`, matching the crash register.
++  Its slot 09 contains `0x6E696863616D6C61`, not a callable code pointer.
++- VM update ID 53926 resolves to `0x1409BFB00`. Instructions at
++  `0x1409BFB88` and `0x1409BFC61` respectively read the freeze byte at
++  `+0x680` and increment the menu-mode timer at `+0x690`.
++- The live freeze value was zero while that timer was nonzero and increasing.
++
++The version-aware VM accessor uses `+0x200` on 1170 and retains the existing
++`+0x210` on 1.7.104. All direct VM consumers now use it. The client update
++hook similarly uses the 1170 freeze field rather than treating its timer as
++a freeze flag. The 1.7.104 layout has not been retested.
++
++Host startup with the pointer fix reached the main menu. A second host startup
++with both fixes also reached the main menu without the original crash. This
++does not establish save-load, connection, or two-player gameplay acceptance.
++
++### Save-load crash, 22:06:55
++
++The subsequent host save-load crashed before joining a server. Matching PDB
++symbols resolve `0x1806C4C7A` to `DiscordService::OnLocationChangeEvent+0x4A`.
++Disassembly loads the player field at `+0xAD8` into R14, then dereferences
++`[r14]`; the crash register contains invalid pointer `0xC2EAC090`. The client
++log had already reported Discord initialization failure (4). This is separate
++from the Papyrus startup failure and precedes the shared-rest test.
++
++The follow-up client skips the location handler without a Discord activity
++manager, and both Discord and discovery use the existing
++`Actor::GetCurrentLocation()` engine getter (Address Library ID 19812) rather
++than reading the fixed player offset. No replacement struct offset is guessed.
++The client rebuild passes; save-load acceptance remains pending. The protocol
++identity remains v0.6, with the client revision recorded by SHA256 in the private
++deployment manifest. Original crash executable/PDB and logs are retained
++privately; no save restoration or actor-value edits were performed.
++
++### Animation crash, 22:15:47
++
++The next attempt used the location-fix client (SHA256 `fb05a115...9947570`)
++and crashed at `0x18065C1DD`, `CachedString::operator=+0xBD`, called from
++`HookPerformAction+0x2E3` while assigning `ActorExtension::LatestAnimation`.
++The string allocator pointer held ASCII `Vampire ` rather than an allocator.
++This is a distinct fault; the attempt does not prove the location fix passed
++save-load acceptance.
++
++The captured dump contains the 1170 engine instructions at `0x14064A8BE`:
++`mov edx,0xBE8`, followed by a call to `0x140CC40C0` (Address Library 68115,
++the allocator), then the player constructor `0x14072CB40` (ID 40411).
++The player deleting destructor also passes `0xBE8` at `0x140756849`.
++Our `sizeof(PlayerCharacter)` is `0xBF0`; the allocator's size switch therefore
++misses 1170 players and never reserves or constructs their ActorExtension.
++The animation copy consequently addresses uninitialized memory outside the
++player allocation. The dump omits that heap region, so its contents are only
++observed through the crash registers/stack, not a full heap reconstruction.
++
++The follow-up recognizes the 1170 allocation size and reserves the existing
++larger ExPlayerCharacter layout, retaining the extension address used by all
++current casts. No whole-player layout adjustment is made. Rebuild passed;
++live main-menu inspection and save-load acceptance are pending. This binary
++evidence is from Capstone and the captured dump, not IDA/Ghidra MCP.
++
++On the subsequent host launch (PID 27872), read-only inspection found the
++player at `0x2AE8BA080`, extension at `+0xBF0`. Both animation strings now
++contain allocator `0x18015D968`, vtable `0x180466570`, allocation method
++`0x18098D7F0`, length 0 and capacity 15. This verifies initialized string state
++during startup, unlike the failed animation copy; it does not establish
++save-load or gameplay acceptance.
++
++### Connection crash, 22:33:48
++
++The allocation-fix client loaded the save and handled animation events; live
++inspection read `moveStop` from its valid extension string. Wrong-version and
++wrong-password attempts were rejected normally. The password was then cleared
++and the isolated v0.6 server accepted the player with 3492 mods at 22:33:31.
++The client crashed during initial assignment, before any rest test.
++
++Matching symbols resolve `0x1806DF750` to
++`CharacterService::RequestServerAssignment+0x4E0`. Instructions load the
++objective array from player `+0x590`, then dereference entry pointer RBX=0xB.
++The 1170 constructor instead initializes this array at `+0x588`
++(`0x14072CF24`); its destructor uses the same offset at `0x14072DDA9`.
++
++The remaining direct player-field consumers were audited together. The
++captured 1170 constructor supplies this evidence:
++
++| Field | 1170 offset | Existing 1.7.104 offset | Evidence instruction |
++| --- | --- | --- | --- |
++| Objectives | 0x588 | 0x590 | 0x14072CF24 |
++| Skills wrapper | 0x9B8 | 0x9C0 | 0x14072DA17 |
++| Difficulty | 0xB00 | 0xB08 | 0x14072D6A1 |
++| Base tints | 0xB18 | 0xB20 | 0x14072D462 |
++| Overlay tints | 0xB30 | 0xB38 | 0x14072D484 (base +0x18) |
++
++Version-aware accessors now cover those fields; assignment, campaign progress,
++damage calculation, and debug views use them. No overall player struct size or
++extension address changes. Constructor bytes were read from the earlier dump
++of the same 1170 engine; this is Capstone evidence, not IDA/Ghidra MCP.
++The client builds and is installed as SHA256
++`21b025d88b08502a57b8befafe895da51a9a33e7ef59126c85b44e7d68f95e34`.
++Connection and rest acceptance remain pending.
++
++Loaded-save inspection on PID 30780 subsequently read all 11 objectives and
++their quest forms, 21 valid tint entries (capacity 32), skills XP 330 and
++difficulty 1. Extension strings remained initialized with `Unequip` captured.
++At 22:42:29 the test server accepted the host; the client logged player
++assignment (`Request id: 14, cookie: 0`) and continued actor synchronization
++without the prior crash. This is single-host initial connection evidence;
++party rest, two-client synchronization and reconnect/restart remain untested.
++Pre-connection read-only effects still showed Weary's regeneration penalty
++-200. Variable03 read as 34 in the candidate actor-value storage inspection;
++maximum-magicka modifier reconciliation still needs console corroboration.
++
++### First real party sleep result
++
++The user confirmed sleep worked after creating a party and failed before that.
++Client/server logs agree: session 1 began for 8 hours at 22:46:41, the sleeper
++finished at 22:46:42, the local SMI snapshot was acknowledged at 22:46:43,
++and the server accepted canonical clock advancement before sending Complete.
++The client consumed Complete. Thus the server clock skip is evidenced, not
++only a map/UI observation. This was one player in a party, not a two-client test.
++
++The post-rest effect snapshot no longer contained Weary's 0x833 effect;
++Variable03 candidate fell from 34 to 3. MagickaRateMult candidate still had
++a permanent -100, so full regeneration/penalty acceptance is NOT established.
++Other active effects and console values need checking before any repair.
++
++Outside a party, the current script requires RestExchange(-3) (party leader)
++and the server requires party membership. No Begin was logged for the earlier
++unpartied sleep. Connected clients also have their normal clock simulation
++disabled, so that path supplies neither the shared time skip nor corresponding
++SMI relief. This remains an explicit limitation, not a successful sleep test.
++
++## Dropped bread cannot be picked up
++
++The user reported a dropped bread repeatedly displaying pickup feedback without
++entering inventory. The client log records an item 0x65C97 drop, count -1,
++at 22:49:30. The isolated server has `bEnableItemDrops=false`.
++
++Source inspection found a deterministic mismatch: RegisterDropped tracks the
++original reference regardless of that server option, and TryPickupDropped then
++suppresses the engine pickup pending a claim. The server previously created
++the corresponding m_drops entry only when replication was enabled, so every
++claim for such a drop was rejected. The original reference was retained and
++each activation repeated the same failed cycle. The previous build did not log
++claim decisions; this cause is inferred from source/configuration and the
++reported behavior, not a captured per-claim diagnostic.
++
++The candidate always records valid tracked drops. A per-drop Replicated flag
++controls remote ground replicas independently from claim accounting. The
++picker receives its normal claim receipt; peers that never had a replica
++receive an ordinary actor inventory delta without reference/claim routing.
++This also fixes their negative drop delta previously being ignored by the
++missing-reference branch. Live drop/claim decision diagnostics were added.
++The existing checkpoint prohibition remains conservative for all active drops.
++
++Client/server rebuilds pass; existing protocol tests pass 225 assertions in
++13 cases. Those tests do not establish drop/pickup gameplay correctness.
++The compiled candidate is staged privately as client SHA256
++`cf712af5a558a0839cae05b1582180dfdd6c63f67f66c8b175ade8314c6fabe0`
++and STServer.dll SHA256
++`55b0684d7bc1a3b6422acdaf8fbc49549461bf230d5737717bd3406d2134c97c`.
++It is NOT yet installed. The host remains on `21b025d8...8f95e34`.
++
++The user was asked to disconnect, try the original bread again (disconnect
++clears local claim tracking while retaining originals), save new progress and
++quit before replacement. No bread was added by console, no save restored, and
++neither running server was replaced. Acceptance still needs original pickup,
++fresh single-item and partial-stack drops, repeated activation, and two-client
++replication/competing pickup tests. Ground claims remain session-local and
++do not provide durable per-item identity across restarts.
++
++The user then confirmed the original bread was recovered after disconnecting,
++saved and closed the host. The new Save14 ESS/SKSE pair (22:55:25) was copied
++and hash-verified privately before replacement. The prepared client and test
++server are now installed; isolated server PID 31628 started on 10580 with
++replication still disabled. Production server PID 24400 was untouched. Host
++PID 29096 launched with the pickup candidate. The user was asked to load
++Save14, connect, note bread count, drop one, pick it up once, and compare count.
++That acceptance result is pending.
++
++No IDA/Ghidra MCP was available. Evidence above comes from Capstone disassembly
++and read-only process reads, not an IDA/Ghidra database. Under AGENTS.md's
++classification these layouts remain unverified through MCP. Experimental
++source work without those tools was previously authorized.
++
++## Magicka and installed SMI
++
++The installed SMI metadata says 1.5.2. Official upstream commit
++`3de7b2d` declares version 1.5.2; its `Events.h`, `Needs/NeedBase.h`,
++`Needs/NeedExhaustion.h`, and `PapyrusAPI/PapyrusAPI.h` were inspected.
++The later upstream checkout is 1.6.x and must not be substituted as evidence
++for installed behavior.
++
++The host's read-only active-effect snapshot contained Survival Mode spell
++`0x87B` (Weary), effect `0x833` (Survival_DamageMagickaRate), magnitude -200,
++without the inactive or dispelled flags. The winning DVSsurvivaltweaks record
++supplies magnitude 200 for that exhaustion stage. This identifies a current
++regeneration penalty; it does not prove the earlier -100 snapshot was stale.
++
++SMI 1.5.2's exhaustion restore API calls DecreaseNeed, which force-recalculates
++stage effects and applies the tracked maximum-magicka penalty delta. A direct
++need-global reset bypasses that work. No forceav/modav or save edits were made.
++The earlier -30 still needs corroboration with SMI's Variable03 tracker.
++
++## Sleep changes
++
++- Each client snapshots its own exhaustion and configured restoration rate;
++  the server receives Ready only after the local script acknowledges capture.
++- After canonical time advancement, restore only the difference between the
++  current need and the pre-rest target. This includes the sleeper and avoids
++  repeating relief already delivered by normal SMI wake handling.
++- Mirror the installed SMI wake timestamp and use its public restore API,
++  including a zero restore when stage/penalty reconciliation is needed.
++- SMI determines each player's own rested eligibility. Leader spouse/bed
++  bonuses are no longer copied to teammates by the script.
++- Retain Finish/Cancel if sleep ends before the Begin receipt arrives.
++- A rejected clock advancement now produces Cancel rather than a benefits receipt.
++- Clear outstanding rest state when leaving a party; retire cancelled receipt IDs.
++
++`prepare_sleep_only.py` extracts our alias's rest code without private SFF or
++IED adapters. It does not enable the broader campaign scripts or patch SSL.
++The test build still contains the experimental native campaign code, with its
++guard disabled; it is not an isolated rebuild of the released native client.
++
++Both full and sleep-only Papyrus variants compile with zero errors/warnings.
++Client and matching server builds pass. Existing native tests pass 225 assertions
++in 13 cases. Existing manager tests pass 63 cases with one Windows symlink skip.
++These are not gameplay tests. Shared hunger/thirst/cold progression, effect
++timer aging, personal skill menus, cancellation, repeated sleeps, and two-client
++disconnect/reconnect/restart behavior still require acceptance.
++
++### Connected menus candidate, after pickup acceptance
++
++User confirmed fresh bread drop/pickup works. Test server logged successful
++claims for drops 532575944705 and 532575944706 with replication disabled.
++This establishes repeated single-item pickup, not stacks/two-client contention.
++
++User then reported Map and Journal/Escape pause while connected. Candidate
++unpauses ordinary connected menus before stack insertion (including custom
++menus); keeps Loading/Main/Fader, sleep/wait transactions and explicit paired
++checkpoint pauses. Journal manual saves are deferred through the engine save
++event queue; UI processing moves from its worker job to after MainLoop returns.
++Offline menu flags retain normal pause behavior, but UI scheduling also changes
++offline on 1170. A pre-existing journal is paused/unpaused around checkpoints
++with the UI pause counter updated. First-person map player update accepts a
++hidden node while connected; local-map updates cannot restore frozen rendering.
++No new plugin, protocol change, server restart, or Papyrus deployment.
++
++Reference: https://github.com/Vermunds/SkyrimSoulsRE at
++2cbd7d5a0e2a6a04381b4076ac73e8d51332fe32 (GPL-3.0), especially SaveHandler,
++MenuProcessing and MapMenuEx. Adapted behavior, not a complete Skyrim Souls port.
++
++1170 Capstone evidence from game memory dump (NO IDA/Ghidra MCP verification):
++- 35727 -> 14060FD40 save function; all four calls/tail branch validated at
++  22940+C4, 52923+2B, 35533+3E/+60, same target.
++- 35772+5D5 cmp ECX,F0000800, original case +5E1, continuation +72A;
++  custom F0004000 calls queued save; unrelated events skip it.
++- 39042+B JNE25 skips UI job body, retaining original completion signal.
++- 36581+7A FF9080030000 calls player vtable+380 then tests RAX. Existing
++  TESObjectREFR::GetNiNode matches that slot. Hidden node exception only at site.
++- 53112+9D writes EAX to flags+1C; wrapper removes background freeze afterward.
++- 36564+D0 reads UI+160, then Main+16 at +E3, determining paused vs unpaused path;
++  main joins work before returning. Post-return scheduling is an experimental
++  assumption; unlike reference's hardcoded +AF1, it uses existing MainLoop hook.
++All added patch sites check opcodes/branch targets before installation; mismatch
++retains old menu allowlist. Thread correctness, camera/audio/weather rendering,
++manual save/load and two-client progression still require gameplay testing.
++Native compile passes; no new gameplay unit tests written.
++
++Client c77ffed282dcfed607b9a47a6c6c118364761b8810f404c93a0463157a96248f
++installed after user saved/closed; Save15 ESS+SKSE and prior working pickup client
++hash-verified in October23 task work/menu-fix-candidate/before-install. Matching
++candidate PDB retained in staging. Rollback manifest updated, original backups
++preserved. Test server31628/10580 and production24400/10578 untouched.
++Runtime startup and connected menu/save acceptance PENDING.
++
++Menu candidate relaunch PID10760 at23:27:06; startup log confirms opcode checks
++passed and deferred-save/main-thread-UI hooks installed. Main menu pending.
+diff --git a/lab/LoreRimLANRest/prepare_sleep_only.py b/lab/LoreRimLANRest/prepare_sleep_only.py
+new file mode 100644
+index 0000000..b057a04
+--- /dev/null
++++ b/lab/LoreRimLANRest/prepare_sleep_only.py
+@@ -0,0 +1,26 @@
++"""Build a sleep-only alias from our source without private follower/IED adapters."""
++import argparse
++from pathlib import Path
++
++
++def prepare(destination):
++    source = Path(__file__).parent / 'source'
++    text = (source / 'SkyrimTogetherPlayerAliasScript.psc').read_text(encoding='utf-8')
++    start = '    campaignFollowerPoll += 1\n'
++    end = '    Actor player = Game.GetPlayer()\n'
++    if text.count(start) != 1 or text.count(end) != 1:
++        raise ValueError('Alias source changed; review sleep-only extraction')
++    before, tail = text.split(start)
++    adapters, after = tail.split(end)
++    if 'LoreRimCampaignReportFollowers' not in adapters or 'IED.Reset' not in adapters:
++        raise ValueError('Expected adapter block not found')
++    text = (before + end + after).replace('Int campaignFollowerPoll = 0\n', '')
++    destination.mkdir(parents=True, exist_ok=True)
++    (destination / 'SkyrimTogetherPlayerAliasScript.psc').write_text(text, encoding='utf-8')
++    (destination / 'LoreRimLANRest.psc').write_text((source / 'LoreRimLANRest.psc').read_text(encoding='utf-8'), encoding='utf-8')
++
++
++if __name__ == '__main__':
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('destination', type=Path)
++    prepare(parser.parse_args().destination)
 diff --git a/lab/LoreRimLANRest/source/LoreRimLANRest.psc b/lab/LoreRimLANRest/source/LoreRimLANRest.psc
 new file mode 100644
-index 0000000..62e4e70
+index 0000000..65221f3
 --- /dev/null
 +++ b/lab/LoreRimLANRest/source/LoreRimLANRest.psc
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,31 @@
 +Scriptname LoreRimLANRest Hidden
 +; 1..24: request leader sleep; -1: completed; -2: interrupted;
 +; 0: consume the locally pending completed rest hours once.
++; -8: snapshot needed; -9: this player's SMI snapshot is ready.
 +Float Function RestExchange(Float command) Global Native
 +
 +Int Function NextEquipmentActor() Global Native
@@ -4931,16 +5997,17 @@ index 0000000..62e4e70
 +Int Function NextCampaignFollower() Global Native
 diff --git a/lab/LoreRimLANRest/source/SkyrimTogetherPlayerAliasScript.psc b/lab/LoreRimLANRest/source/SkyrimTogetherPlayerAliasScript.psc
 new file mode 100644
-index 0000000..24b92a2
+index 0000000..33b3c95
 --- /dev/null
 +++ b/lab/LoreRimLANRest/source/SkyrimTogetherPlayerAliasScript.psc
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,122 @@
 +ScriptName SkyrimTogetherPlayerAliasScript extends ReferenceAlias
 +
 +SkyrimTogetherVerifyLaunchScript Property VerifyLaunchScript Auto
-+; Installed Survival Mode Improved default, configurable in a LAN-only plugin.
-+Float Property ExhaustionRestoredPerHour = 50.0 Auto
 +Bool localSleep = False
++Bool restSnapshotValid = False
++Float restStartExhaustion = 0.0
++Float restRestorePerHour = 0.0
 +Int campaignFollowerPoll = 0
 +
 +Event OnInit()
@@ -4953,6 +6020,7 @@ index 0000000..24b92a2
 +    RegisterForSleep()
 +    RegisterForSingleUpdate(1.0)
 +    localSleep = False
++    restSnapshotValid = False
 +EndEvent
 +
 +Event OnSleepStart(Float startTime, Float endTime)
@@ -4969,25 +6037,29 @@ index 0000000..24b92a2
 +            LoreRimLANRest.RestExchange(-2.0)
 +            localSleep = False
 +        Else
-+            ; Let the normal sleep quest apply the sleeper's actual benefit first.
-+            Utility.Wait(0.3)
-+            PlayerSleepQuestScript sleepQuest = Game.GetFormFromFile(0x000FC1A2, "Skyrim.esm") as PlayerSleepQuestScript
-+            Int benefit = 0
-+            If sleepQuest
-+                If Game.GetPlayer().HasSpell(sleepQuest.MarriageSleepAbility)
-+                    benefit = 3
-+                ElseIf Game.GetPlayer().HasSpell(sleepQuest.WellRested)
-+                    benefit = 2
-+                ElseIf Game.GetPlayer().HasSpell(sleepQuest.Rested)
-+                    benefit = 1
-+                EndIf
-+            EndIf
-+            LoreRimLANRest.RestExchange(-10.0 - benefit)
++            LoreRimLANRest.RestExchange(-1.0)
 +        EndIf
 +    EndIf
 +EndEvent
 +
 +Event OnUpdate()
++    ; Ready is withheld until this player's own SMI need has been captured.
++    ; These forms and the API were checked against installed SMI 1.5.2.
++    GlobalVariable exhaustion = Game.GetFormFromFile(0x816, "ccQDRSSE001-SurvivalMode.esl") as GlobalVariable
++    GlobalVariable restoreRate = Game.GetFormFromFile(0x80E, "ccQDRSSE001-SurvivalMode.esl") as GlobalVariable
++    GlobalVariable exhaustionTimestamp = Game.GetFormFromFile(0xA16, "SurvivalModeImproved.esp") as GlobalVariable
++    If LoreRimLANRest.RestExchange(-8.0) > 0.0
++        If !restSnapshotValid && exhaustion && restoreRate && exhaustionTimestamp
++            restStartExhaustion = exhaustion.GetValue()
++            restRestorePerHour = restoreRate.GetValue()
++            If restStartExhaustion >= 0.0 && restRestorePerHour >= 0.0
++                restSnapshotValid = True
++                LoreRimLANRest.RestExchange(-9.0)
++            EndIf
++        EndIf
++    Else
++        restSnapshotValid = False
++    EndIf
 +    campaignFollowerPoll += 1
 +    If campaignFollowerPoll >= 5 && LoreRimLANRest.CampaignFollower(0, 6) == 1
 +        campaignFollowerPoll = 0
@@ -5027,29 +6099,26 @@ index 0000000..24b92a2
 +    Actor player = Game.GetPlayer()
 +    If player && !player.IsDead() && !player.IsInCombat() && !Utility.IsInMenuMode()
 +        Float hours = LoreRimLANRest.RestExchange(0.0)
-+        If hours > 0.0
-+            ; The sleeper already received the game's normal sleep bookkeeping.
-+            If !localSleep
-+                SurvivalModeImprovedApi.RestoreExhaustionLevel(hours * ExhaustionRestoredPerHour)
++        If hours > 0.0 && restSnapshotValid && exhaustion && exhaustionTimestamp
++            Float targetExhaustion = restStartExhaustion - hours * restRestorePerHour
++            If targetExhaustion < 0.0
++                targetExhaustion = 0.0
 +            EndIf
-+            Int benefit = LoreRimLANRest.RestExchange(-7.0) as Int
-+            If !localSleep && benefit > 0
-+                PlayerSleepQuestScript sleepQuest = Game.GetFormFromFile(0x000FC1A2, "Skyrim.esm") as PlayerSleepQuestScript
-+                If sleepQuest
-+                    sleepQuest.RemoveRested()
-+                    If benefit == 3
-+                        player.AddSpell(sleepQuest.MarriageSleepAbility, False)
-+                    ElseIf benefit == 2
-+                        player.AddSpell(sleepQuest.WellRested, False)
-+                    ElseIf benefit == 1
-+                        player.AddSpell(sleepQuest.Rested, False)
-+                    EndIf
-+                EndIf
++            Float remainingRelief = exhaustion.GetValue() - targetExhaustion
++            If remainingRelief < 0.0
++                remainingRelief = 0.0
 +            EndIf
++            ; Mirror SMI's normal wake timestamp before its public restore API.
++            ; The API also reconciles stage spells, tracked magicka penalties,
++            ; and this player's eligibility for rested/spouse/bed benefits.
++            exhaustionTimestamp.SetValue(Utility.GetCurrentGameTime() * 1440.0)
++            SurvivalModeImprovedApi.RestoreExhaustionLevel(remainingRelief)
++            LoreRimLANRest.RestExchange(-7.0)
 +            ; A local menu adapter must check this player's unspent points.
 +            ; Do not call SSL.UpdateSkillCaps here: it adds a fresh level award.
 +            SendModEvent("LoreRimLAN_RestCompleted", "", hours)
 +            localSleep = False
++            restSnapshotValid = False
 +        EndIf
 +    EndIf
 +    RegisterForSingleUpdate(1.0)

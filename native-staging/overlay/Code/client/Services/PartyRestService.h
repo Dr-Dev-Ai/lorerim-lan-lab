@@ -35,6 +35,9 @@ private:
     Vector<TimedEffect> m_timedEffects;
     float m_restTimeScale{};
     bool m_localRest{};
+    bool m_finishPending{};
+    bool m_cancelPending{};
+    uint8_t m_finishBenefit{};
     World& m_world;
     TransportService& m_transport;
     uint64_t m_session{};
@@ -49,6 +52,8 @@ private:
     static std::atomic<float> s_pendingHours;
     static std::atomic<bool> s_isLeader;
     static std::atomic<bool> s_connected;
+    static std::atomic<bool> s_scriptSnapshotRequested;
+    static std::atomic<bool> s_scriptReady;
     entt::scoped_connection m_commandConnection;
     entt::scoped_connection m_notifyConnection;
     entt::scoped_connection m_updateConnection;

@@ -64,6 +64,7 @@ void PartyRestService::OnRequest(const PacketEvent<PartyRestRequest>& acEvent) n
         for (Player* pMember : pParty->Members)
             session.Members.push_back(pMember->GetId());
         m_sessions.emplace(cLeader, session);
+        spdlog::info("[PartyRest] Begin session {}: {} hours, {} members", session.Id, session.Hours, session.Members.size());
         Broadcast(session, PartyRestAction::Begin);
         return;
     }
@@ -89,6 +90,7 @@ void PartyRestService::OnRequest(const PacketEvent<PartyRestRequest>& acEvent) n
             session.Deadline = cNow + 10000;
             // Require new safety acknowledgements after the sleeper wakes.
             session.ReadyAt.clear();
+            spdlog::info("[PartyRest] Sleeper finished session {}; awaiting fresh safety reports", session.Id);
         }
         break;
     case PartyRestAction::Cancel:
@@ -132,7 +134,9 @@ void PartyRestService::OnUpdate(const UpdateEvent&) noexcept
             advance = advance && std::find(session.Members.begin(), session.Members.end(), pPlayer->GetId()) != session.Members.end();
         if (advance)
             advance = m_world.GetCalendarService().AdvanceRestHours(session.Hours);
-        Broadcast(session, PartyRestAction::Complete, advance);
+        // No benefits receipt unless the canonical clock actually advanced.
+        spdlog::info("[PartyRest] Session {} clock advancement {}", session.Id, advance ? "accepted" : "rejected");
+        Broadcast(session, advance ? PartyRestAction::Complete : PartyRestAction::Cancel, advance);
         it = m_sessions.erase(it);
     }
 }

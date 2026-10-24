@@ -385,9 +385,9 @@ void CampaignService::OnUpdate(const UpdateEvent&) noexcept
         m_nextProgressCheck = Now() + 250;
         CampaignSave::Snapshot loaded;
         auto* player = PlayerCharacter::Get();
-        if (player && player->pSkills && *player->pSkills && m_saveRead(&loaded, sizeof(loaded)) && loaded.Status == CampaignSave::Ready)
+        auto* skills = player ? player->GetSkills() : nullptr;
+        if (skills && m_saveRead(&loaded, sizeof(loaded)) && loaded.Status == CampaignSave::Ready)
         {
-            const auto* skills = *player->pSkills;
             std::array<float,38> progress{};
             progress[0] = static_cast<float>(player->GetLevel()); progress[1] = skills->xp;
             for (size_t i = 0; i < 18; ++i) { progress[2+i*2] = skills->skills[i].level; progress[3+i*2] = skills->skills[i].xp; }

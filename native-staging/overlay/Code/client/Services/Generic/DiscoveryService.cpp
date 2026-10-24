@@ -61,7 +61,7 @@ DiscoveryService::DiscoveryService(World& aWorld, entt::dispatcher& aDispatcher)
 
 void DiscoveryService::VisitCell(bool aForceTrigger) noexcept
 {
-    const PlayerCharacter* pPlayer = PlayerCharacter::Get();
+    PlayerCharacter* pPlayer = PlayerCharacter::Get();
     if (!pPlayer)
         return;
 
@@ -70,11 +70,12 @@ void DiscoveryService::VisitCell(bool aForceTrigger) noexcept
     else if (pPlayer->GetParentCellEx())
         VisitInteriorCell(aForceTrigger);
 
-    // exactly how the game does it too
-    if (m_pLocation != pPlayer->locationForm)
+    // Use the existing engine getter instead of a version-specific player offset.
+    auto* pLocation = pPlayer->GetCurrentLocation();
+    if (m_pLocation != pLocation)
     {
         m_dispatcher.trigger(LocationChangeEvent());
-        m_pLocation = pPlayer->locationForm;
+        m_pLocation = pLocation;
     }
 }
 

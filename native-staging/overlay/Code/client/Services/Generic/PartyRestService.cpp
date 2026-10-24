@@ -20,6 +20,8 @@ std::atomic<uint8_t> PartyRestService::s_pendingBenefit{0};
 std::atomic<float> PartyRestService::s_pendingHours{0.f};
 std::atomic<bool> PartyRestService::s_isLeader{false};
 std::atomic<bool> PartyRestService::s_connected{false};
+std::atomic<bool> PartyRestService::s_scriptSnapshotRequested{false};
+std::atomic<bool> PartyRestService::s_scriptReady{false};
 
 PartyRestService::PartyRestService(World& aWorld, entt::dispatcher& aDispatcher, TransportService& aTransport)
     : m_world(aWorld), m_transport(aTransport)
@@ -31,6 +33,17 @@ PartyRestService::PartyRestService(World& aWorld, entt::dispatcher& aDispatcher,
 }
 float PartyRestService::Exchange(float aCommand) noexcept
 {
+    if (aCommand == -8.f)
+        return s_scriptSnapshotRequested.load() ? 1.f : 0.f;
+    if (aCommand == -9.f)
+    {
+        if (s_scriptSnapshotRequested.load())
+        {
+            if (!s_scriptReady.exchange(true))
+                spdlog::info("[PartyRest] Local need snapshot ready");
+        }
+        return 0.f;
+    }
     if (aCommand == -7.f)
         return static_cast<float>(s_pendingBenefit.exchange(0));
     if (aCommand == -6.f)
@@ -38,7 +51,12 @@ float PartyRestService::Exchange(float aCommand) noexcept
     if (aCommand == -3.f)
         return s_isLeader.load() ? 1.f : 0.f;
     if (aCommand == 0.f)
-        return s_pendingHours.exchange(0.f);
+    {
+        const float cHours = s_pendingHours.exchange(0.f);
+        if (cHours > 0.f)
+            s_scriptSnapshotRequested.store(false);
+        return cHours;
+    }
     if (std::isfinite(aCommand))
         World::Get().GetRunner().Trigger(PartyRestCommandEvent{aCommand});
     return 0.f;
@@ -68,16 +86,34 @@ void PartyRestService::OnCommand(const PartyRestCommandEvent& acEvent) noexcept
         return;
     if (acEvent.Command >= 1.f && acEvent.Command <= 24.f)
     {
+        if (m_localRest || m_session || s_pendingHours.load() > 0.f)
+            return;
         CaptureTimedEffects();
         m_localRest = true;
+        m_finishPending = false;
+        m_cancelPending = false;
         Send(static_cast<uint8_t>(PartyRestAction::Begin), acEvent.Command);
     }
-    else if (m_session && acEvent.Command >= -13.f && acEvent.Command <= -10.f)
-        Send(static_cast<uint8_t>(PartyRestAction::Finish), 0.f, static_cast<uint8_t>(-acEvent.Command - 10.f));
-    else if (m_session && acEvent.Command == -1.f)
-        Send(static_cast<uint8_t>(PartyRestAction::Finish));
-    else if (m_session && acEvent.Command == -2.f)
-        Send(static_cast<uint8_t>(PartyRestAction::Cancel));
+    else if (m_localRest && (acEvent.Command == -1.f || (acEvent.Command >= -13.f && acEvent.Command <= -10.f)))
+    {
+        m_finishBenefit = acEvent.Command == -1.f ? 0 : static_cast<uint8_t>(-acEvent.Command - 10.f);
+        // Sleep can end before the server's Begin receipt reaches this client.
+        m_finishPending = true;
+        if (m_session)
+        {
+            Send(static_cast<uint8_t>(PartyRestAction::Finish), 0.f, m_finishBenefit);
+            m_finishPending = false;
+        }
+    }
+    else if (m_localRest && acEvent.Command == -2.f)
+    {
+        // Retain cancellation until Begin supplies the session ID as well.
+        m_localRest = false;
+        m_finishPending = false;
+        m_cancelPending = !m_session;
+        if (m_session)
+            Send(static_cast<uint8_t>(PartyRestAction::Cancel));
+    }
 }
 void PartyRestService::OnNotify(const NotifyPartyRest& acMessage) noexcept
 {
@@ -85,19 +121,41 @@ void PartyRestService::OnNotify(const NotifyPartyRest& acMessage) noexcept
         return;
     if (acMessage.Action == PartyRestAction::Begin && acMessage.Session > m_lastReceipt)
     {
+        if (m_session || s_pendingHours.load() > 0.f)
+            return;
         if (!m_localRest)
             CaptureTimedEffects();
         m_session = acMessage.Session;
         m_nextReport = 0;
+        if (m_cancelPending)
+        {
+            Send(static_cast<uint8_t>(PartyRestAction::Cancel));
+            m_cancelPending = false;
+            return;
+        }
+        s_scriptReady.store(false);
+        s_scriptSnapshotRequested.store(true);
+        spdlog::info("[PartyRest] Begin session {} for {} hours", m_session, acMessage.Hours);
+        if (m_finishPending)
+        {
+            Send(static_cast<uint8_t>(PartyRestAction::Finish), 0.f, m_finishBenefit);
+            m_finishPending = false;
+        }
     }
     else if (acMessage.Action == PartyRestAction::Cancel && acMessage.Session == m_session)
     {
+        m_lastReceipt = acMessage.Session;
         m_session = 0;
         m_localRest = false;
+        m_finishPending = false;
+        m_cancelPending = false;
+        s_scriptSnapshotRequested.store(false);
+        s_scriptReady.store(false);
         m_timedEffects.clear();
+        spdlog::info("[PartyRest] Cancel session {}", acMessage.Session);
     }
     else if (acMessage.Action == PartyRestAction::Complete && acMessage.Session == m_session
-        && acMessage.Session > m_lastReceipt && std::isfinite(acMessage.Hours) && acMessage.Hours >= 1.f && acMessage.Hours <= 24.f)
+        && acMessage.Session > m_lastReceipt && acMessage.AdvanceTime && std::isfinite(acMessage.Hours) && acMessage.Hours >= 1.f && acMessage.Hours <= 24.f)
     {
         if (acMessage.AdvanceTime)
         {
@@ -111,6 +169,7 @@ void PartyRestService::OnNotify(const NotifyPartyRest& acMessage) noexcept
         s_pendingHours.fetch_add(acMessage.Hours);
         m_lastReceipt = acMessage.Session;
         m_session = 0;
+        spdlog::info("[PartyRest] Complete session {} for {} hours", acMessage.Session, acMessage.Hours);
     }
 }
 void PartyRestService::OnUpdate(const UpdateEvent&) noexcept
@@ -132,14 +191,18 @@ void PartyRestService::OnUpdate(const UpdateEvent&) noexcept
     s_connected.store(m_transport.IsConnected());
     s_isLeader.store(m_transport.IsConnected() && m_world.GetPartyService().IsLeader());
     if (!m_world.GetPartyService().IsInParty())
-        s_pendingHours.store(0.f);
-    if (!m_session || !m_transport.IsConnected())
-        return;
-    if (!m_world.GetPartyService().IsInParty())
     {
+        s_pendingHours.store(0.f);
+        s_pendingBenefit.store(0);
+        s_scriptSnapshotRequested.store(false);
+        s_scriptReady.store(false);
         m_session = 0;
+        m_localRest = m_finishPending = m_cancelPending = false;
+        m_timedEffects.clear();
         return;
     }
+    if (!m_session || !m_transport.IsConnected())
+        return;
     const uint64_t cNow = m_world.GetTick();
     if (cNow < m_nextReport)
         return;
@@ -147,6 +210,7 @@ void PartyRestService::OnUpdate(const UpdateEvent&) noexcept
     const PlayerCharacter* pPlayer = PlayerCharacter::Get();
     const UI* pUI = UI::Get();
     const bool cSafe = pPlayer && pUI && !pPlayer->IsDead() && !pPlayer->IsInCombat()
+        && s_scriptReady.load()
         && !pUI->GetMenuOpen(BSFixedString("Loading Menu"))
         && !pUI->GetMenuOpen(BSFixedString("Dialogue Menu"));
     Send(static_cast<uint8_t>(cSafe ? PartyRestAction::Ready : PartyRestAction::Unsafe));
@@ -161,11 +225,15 @@ void PartyRestService::OnDisconnected(const DisconnectedEvent&) noexcept
         s_displayQueue.clear();
     }
     m_localRest = false;
+    m_finishPending = false;
+    m_cancelPending = false;
     m_timedEffects.clear();
     s_pendingHours.store(0.f);
     s_pendingBenefit.store(0);
     s_isLeader.store(false);
     s_connected.store(false);
+    s_scriptSnapshotRequested.store(false);
+    s_scriptReady.store(false);
 }
 
 void PartyRestService::CaptureTimedEffects() noexcept
