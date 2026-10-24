@@ -1,3 +1,57 @@
+## Host recovery checks passed; Terra unavailable for two-client testing
+
+User confirmed Terra is not available right now. Do not message another person,
+restart production, or claim two-client acceptance. DesktopCommander reported
+Terra offline. A matching PRIVATE client candidate is prepared in October23task
+work/pair-client-candidate: installed client5e5f0b66, EarlyLoad2546fca9, two owned
+rest bridge PEXs, telemetry INI, respawn AutoExec template, license and SHA manifest.
+Host normalized3492-plugin order is included privately for comparison; no saves,
+credentials or public binary upload. NOT transferred or installed on Terra.
+Her active F: installation, current plugin/runtime compatibility, process state
+and save backups must be rechecked when online; do not touch old D: copy.
+
+Current verified host: 1170 startup/load/connect, repeated single-item pickup,
+Map/Journal unpause + new manual save, Sync Health/F10, three in-session respawns,
+connected-load disconnect + persistent notice, eight-hour UNPARTIED rest with
+canonical skip/exhaustion relief, one-hour PARTY rest/controls, engine magicka
+rate1.05/multiplier150 and actual resource recovery. Raw AV decoder RETIRED;
+historical residual-100/Variable03/max-magicka candidates are invalid evidence.
+User temporary10-magicka drain refilled; no permanent stat correction was needed.
+
+Next real two-client checks: remote actor timing/corrections and movement across
+cells; shared rest and outsider blocking/cancellation; drop replication/stacks/
+pickup contention; death visibility; follower/quest/campaign/checkpoint systems.
+These remain unverified and the PR stays draft. Host29548/server17180 may remain
+live; recheck before actions, preserve unsaved progress. No new install/restart
+needed on host. Production24400 remains unchanged. User can resume when Terra
+is available; no automatic follow-up or notification was scheduled.
+
+## Magicka regeneration verified; raw AV decoder RETIRED — October 24
+
+The engine's read-only console diagnostics contradict the historical raw memory
+candidate decoder. MagickaRateMult current150, computedbase100, permanent+50,
+temporary0, damage0. MagickaRate current/computedbase/derived1.05, all modifiers0.
+Both outputs were visually read through ComputerUse after user entered queries.
+User then ran player.damageav magicka10 once, closed console, waited20seconds
+out of combat and confirmed the bar refilled. Current regeneration PASSED.
+No permanent forceav/modav/stat repair was applied or needed.
+
+Historical raw actor_value_storage_candidates are INVALIDATED, including the
+claimed residual-100, Variable03 tracker numbers and cached maximum-magicka
+modifier readings. Do not use them for diagnosis. The private read_effects_live.py
+now omits that decoder. Acceptance JSON retains invalidated numbers only under
+an explicit invalidated_raw_actor_value_candidates field. Active-effect833
+disappearance, user exhaustion relief and canonical clock acceptance remain
+independent evidence; the eight-hour and one-hour rest results still pass.
+
+Next major requirement: real two-client acceptance. DesktopCommander currently
+reports Terra OFFLINE, lastseen4hours; host remains live29548/testserver17180.
+No partner update or production server restart performed. Prepare matching client
+files privately, then validate Terra's active F: installation/profile/plugin
+compatibility and save backups before applying anything. Do not infer parity from
+old3412-plugin comparison; host currently3492. Test remote actor telemetry,
+sharedrest/outsider blocking, pickup contention, deathvisibility and co-op systems.
+
 ## One-hour party sleep regression PASSED — October 24, 01:31
 
 User created a one-person party as leader and confirmed sleep/time/controls work.

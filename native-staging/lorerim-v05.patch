@@ -6129,10 +6129,36 @@ index 0000000..acd7001
 +}
 diff --git a/lab/LoreRimLANRest/RECOVERY-STATUS.md b/lab/LoreRimLANRest/RECOVERY-STATUS.md
 new file mode 100644
-index 0000000..e17d5ad
+index 0000000..3aa9f71
 --- /dev/null
 +++ b/lab/LoreRimLANRest/RECOVERY-STATUS.md
-@@ -0,0 +1,461 @@
+@@ -0,0 +1,487 @@
++## Magicka regeneration verified; raw AV decoder RETIRED — October 24
++
++The engine's read-only console diagnostics contradict the historical raw memory
++candidate decoder. MagickaRateMult current150, computedbase100, permanent+50,
++temporary0, damage0. MagickaRate current/computedbase/derived1.05, all modifiers0.
++Both outputs were visually read through ComputerUse after user entered queries.
++User then ran player.damageav magicka10 once, closed console, waited20seconds
++out of combat and confirmed the bar refilled. Current regeneration PASSED.
++No permanent forceav/modav/stat repair was applied or needed.
++
++Historical raw actor_value_storage_candidates are INVALIDATED, including the
++claimed residual-100, Variable03 tracker numbers and cached maximum-magicka
++modifier readings. Do not use them for diagnosis. The private read_effects_live.py
++now omits that decoder. Acceptance JSON retains invalidated numbers only under
++an explicit invalidated_raw_actor_value_candidates field. Active-effect833
++disappearance, user exhaustion relief and canonical clock acceptance remain
++independent evidence; the eight-hour and one-hour rest results still pass.
++
++Next major requirement: real two-client acceptance. DesktopCommander currently
++reports Terra OFFLINE, lastseen4hours; host remains live29548/testserver17180.
++No partner update or production server restart performed. Prepare matching client
++files privately, then validate Terra's active F: installation/profile/plugin
++compatibility and save backups before applying anything. Do not infer parity from
++old3412-plugin comparison; host currently3492. Test remote actor telemetry,
++sharedrest/outsider blocking, pickup contention, deathvisibility and co-op systems.
++
 +## One-hour party sleep regression PASSED — October 24, 01:31
 +
 +User created a one-person party as leader and confirmed sleep/time/controls work.
