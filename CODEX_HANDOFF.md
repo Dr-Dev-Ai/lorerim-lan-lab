@@ -1,3 +1,13 @@
+## First multiplayer death check passed — October 24, 00:54
+
+Installed client 2ab06f8d...20a16c5 (native code 54c14cf), host PID16860,
+isolated server PID29888/10580 with death mode enabled. User confirmed ordinary
+enemy death respawned, remained connected and restored movement. Client log:
+respawn began 00:54:16.037, completed 00:54:21.053 and notified server. No save
+load or disconnect followed this death. This supersedes the first-death pending
+status below. Repeated death and deliberate connected-load fallback are still
+pending; two-client respawn visibility has not been tested. Save20 stays backed up.
+
 ## Death / save-load guard candidate installed — October 24
 
 User reported death automatically loading a save while the multiplayer session

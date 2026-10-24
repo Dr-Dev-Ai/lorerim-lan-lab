@@ -6,7 +6,7 @@ Upstream: https://github.com/tiltedphoques/TiltedEvolution.git
 
 Exact upstream base: `5a72cdcd17b998fb1462bb5c6fb0d60d29b98de9`
 
-Full Windows development commit: `ede87ffe1b6ef576de3f446a7311ac4c9a18af80`
+Full Windows development commit: `c55fe305b2721b96261e5a1835166d96316d1c1d`
 
 ## Reconstruct the native worktree
 

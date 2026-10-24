@@ -1,7 +1,7 @@
 {
   "upstream_repository": "https://github.com/tiltedphoques/TiltedEvolution.git",
   "base_commit": "5a72cdcd17b998fb1462bb5c6fb0d60d29b98de9",
-  "development_commit": "ede87ffe1b6ef576de3f446a7311ac4c9a18af80",
+  "development_commit": "c55fe305b2721b96261e5a1835166d96316d1c1d",
   "startup_status": "HOST_1170_STARTUP_LOAD_CONNECTION_PASSED",
   "private_script_paths_omitted": [
     "lab/LoreRimLANRest/source/StaticSkillLevelingQuestScript.psc",
@@ -116,7 +116,7 @@
     "Code/server/World.cpp": "97bc2ef2b4b695ca3d4235cc80866bf05d4ba887c083ea9ad6a21683f1319859",
     "Code/server/xmake.lua": "8f97277294adeb1043f28dc036000abd7333b0ce9e6947e0afd130c85f51b263",
     "Code/tests/lan_protocol.cpp": "bc729feeb3303e0c188ba843e45542c171b5dd0a38795fe081f877bb4e07a321",
-    "lab/LoreRimLANRest/RECOVERY-STATUS.md": "7435bfe6dea11c5f1035d73478978562b1dbbfe6b8ba002e6cbda20dc59c39eb",
+    "lab/LoreRimLANRest/RECOVERY-STATUS.md": "693dbdc04ccf344f3ab79ded2c5e7d1460b39af6be985dfb4998ffa4f2210875",
     "lab/LoreRimLANRest/prepare_sleep_only.py": "2b360fc487f3ceb4738c75eecd7baa6104bd80c8ed6bb908c72b7b94625cdf3f",
     "lab/LoreRimLANRest/source/LoreRimLANRest.psc": "bd4ded43c0436a8bd3c04cc673b5c732d237e5e93b84b33e9c6b71e1faaaf368",
     "lab/LoreRimLANRest/source/SkyrimTogetherPlayerAliasScript.psc": "ceb9f29513c8c59e90a7ff1fdb1a1d09e8d2dfe70166241e17d99805f53efa18",
@@ -164,6 +164,6 @@
     "menus": "Host Map/Journal clock progression, new manual save/reload, first/third-person and local-map/camera/sound checks passed; custom-menu, overwrite/quicksave, paired-checkpoint and two-client regressions pending",
     "terra": "No new client deployment or production server restart",
     "sync_health": "Host visibility, plausible local metrics and F10 modes passed; remote actor/two-client checks and true state agreement pending",
-    "death_respawn": "CANDIDATE_INSTALLED_RUNTIME_ACCEPTANCE_PENDING"
+    "death_respawn": "FIRST_ORDINARY_COMBAT_DEATH_PASSED_REPEAT_AND_LOAD_FALLBACK_PENDING"
   }
 }
