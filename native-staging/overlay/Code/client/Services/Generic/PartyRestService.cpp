@@ -82,7 +82,8 @@ void PartyRestService::OnCommand(const PartyRestCommandEvent& acEvent) noexcept
         m_pendingStatsMenu = true;
         return;
     }
-    if (!m_transport.IsConnected() || !m_world.GetPartyService().IsLeader())
+    const auto& party = m_world.GetPartyService();
+    if (!m_transport.IsConnected() || (party.IsInParty() && !party.IsLeader()))
         return;
     if (acEvent.Command >= 1.f && acEvent.Command <= 24.f)
     {
@@ -117,7 +118,7 @@ void PartyRestService::OnCommand(const PartyRestCommandEvent& acEvent) noexcept
 }
 void PartyRestService::OnNotify(const NotifyPartyRest& acMessage) noexcept
 {
-    if (!m_transport.IsConnected() || !m_world.GetPartyService().IsInParty() || !acMessage.Session)
+    if (!m_transport.IsConnected() || !acMessage.Session)
         return;
     if (acMessage.Action == PartyRestAction::Begin && acMessage.Session > m_lastReceipt)
     {
@@ -153,6 +154,7 @@ void PartyRestService::OnNotify(const NotifyPartyRest& acMessage) noexcept
         s_scriptReady.store(false);
         m_timedEffects.clear();
         spdlog::info("[PartyRest] Cancel session {}", acMessage.Session);
+        Utils::ShowHudMessage(String("Rest canceled: shared time could not advance safely."));
     }
     else if (acMessage.Action == PartyRestAction::Complete && acMessage.Session == m_session
         && acMessage.Session > m_lastReceipt && acMessage.AdvanceTime && std::isfinite(acMessage.Hours) && acMessage.Hours >= 1.f && acMessage.Hours <= 24.f)
@@ -189,18 +191,12 @@ void PartyRestService::OnUpdate(const UpdateEvent&) noexcept
         }
     }
     s_connected.store(m_transport.IsConnected());
-    s_isLeader.store(m_transport.IsConnected() && m_world.GetPartyService().IsLeader());
-    if (!m_world.GetPartyService().IsInParty())
-    {
-        s_pendingHours.store(0.f);
-        s_pendingBenefit.store(0);
-        s_scriptSnapshotRequested.store(false);
-        s_scriptReady.store(false);
-        m_session = 0;
-        m_localRest = m_finishPending = m_cancelPending = false;
-        m_timedEffects.clear();
-        return;
-    }
+    const auto& party = m_world.GetPartyService();
+    // Papyrus command -3 means eligible to initiate rest: party leader or
+    // unpartied. The server still authorizes membership and the world skip.
+    s_isLeader.store(m_transport.IsConnected() && (!party.IsInParty() || party.IsLeader()));
+    // Keep unpartied sessions alive. The server cancels changed membership;
+    // disconnect cleanup also clears pending receipts and local snapshots.
     if (!m_session || !m_transport.IsConnected())
         return;
     const uint64_t cNow = m_world.GetTick();

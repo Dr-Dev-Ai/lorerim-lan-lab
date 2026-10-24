@@ -16,6 +16,8 @@ bool PartyRestService::MembershipMatches(const Session& acSession) noexcept
 {
     Player* pLeader = m_world.GetPlayerManager().GetById(acSession.Leader);
     const auto* pParty = pLeader ? m_world.GetPartyService().GetPlayerParty(pLeader) : nullptr;
+    if (acSession.Unpartied)
+        return pLeader && !pParty && acSession.Members.size() == 1 && acSession.Members[0] == acSession.Leader;
     if (!pParty || pParty->LeaderPlayerId != acSession.Leader || pParty->Members.size() != acSession.Members.size())
         return false;
     for (Player* pPlayer : pParty->Members)
@@ -46,9 +48,7 @@ void PartyRestService::OnRequest(const PacketEvent<PartyRestRequest>& acEvent) n
     const auto& request = acEvent.Packet;
     Player* pPlayer = acEvent.pPlayer;
     const auto* pParty = m_world.GetPartyService().GetPlayerParty(pPlayer);
-    if (!pParty)
-        return;
-    const uint32_t cLeader = pParty->LeaderPlayerId;
+    const uint32_t cLeader = pParty ? pParty->LeaderPlayerId : pPlayer->GetId();
     const uint64_t cNow = GameServer::Get()->GetTick();
     if (request.Action == PartyRestAction::Begin)
     {
@@ -59,12 +59,18 @@ void PartyRestService::OnRequest(const PacketEvent<PartyRestRequest>& acEvent) n
         Session session;
         session.Id = m_nextSession++;
         session.Leader = cLeader;
+        session.Unpartied = !pParty;
         session.Hours = request.Hours;
         session.Deadline = cNow + 120000;
-        for (Player* pMember : pParty->Members)
-            session.Members.push_back(pMember->GetId());
+        if (pParty)
+        {
+            for (Player* pMember : pParty->Members)
+                session.Members.push_back(pMember->GetId());
+        }
+        else
+            session.Members.push_back(cLeader);
         m_sessions.emplace(cLeader, session);
-        spdlog::info("[PartyRest] Begin session {}: {} hours, {} members", session.Id, session.Hours, session.Members.size());
+        spdlog::info("[PartyRest] Begin session {}: {} hours, {} members, {}", session.Id, session.Hours, session.Members.size(), session.Unpartied ? "unpartied" : "party");
         Broadcast(session, PartyRestAction::Begin);
         return;
     }
@@ -128,7 +134,8 @@ void PartyRestService::OnUpdate(const UpdateEvent&) noexcept
             continue;
         }
         // This LAN policy authorizes a world skip only when everybody connected
-        // belongs to the resting party and has just acknowledged being safe.
+        // belongs to the resting party (or is the sole unpartied sleeper) and
+        // has just acknowledged being safe. Outsiders block an unpartied skip.
         bool advance = true;
         for (Player* pPlayer : m_world.GetPlayerManager())
             advance = advance && std::find(session.Members.begin(), session.Members.end(), pPlayer->GetId()) != session.Members.end();

@@ -1,7 +1,7 @@
 {
   "upstream_repository": "https://github.com/tiltedphoques/TiltedEvolution.git",
   "base_commit": "5a72cdcd17b998fb1462bb5c6fb0d60d29b98de9",
-  "development_commit": "6f4a8958b92fb6a450974689eba681d5de8ed9ce",
+  "development_commit": "eaf689bf3cd75d2c4ab2eacc9beaa32b1c0d1bdc",
   "startup_status": "HOST_1170_STARTUP_LOAD_CONNECTION_PASSED",
   "private_script_paths_omitted": [
     "lab/LoreRimLANRest/source/StaticSkillLevelingQuestScript.psc",
@@ -44,7 +44,7 @@
     "Code/client/Services/Generic/DiscoveryService.cpp": "77ea4abf3c2a7dd46c2a8e57dda1c198ec8f01d2427daa504b6b5feb67b6acee",
     "Code/client/Services/Generic/InventoryService.cpp": "5c90744147e9fe45c3a0f0e7fa90bcb2fbd339d7ff9e9bbe60d9983a9e44fa69",
     "Code/client/Services/Generic/ObjectService.cpp": "46bba366ac0e638b1a1eeeaf7c35d55bcf10735ba09c602ed84e77db26107213",
-    "Code/client/Services/Generic/PartyRestService.cpp": "04ae0faf31a43d2353a331c8b34e081b08ccfea4000669c8224888d268592d70",
+    "Code/client/Services/Generic/PartyRestService.cpp": "42e5be10ab5cb90b302537cedc91c3c5c6f9b22cf0f62f34a99f139e5ac1abaa",
     "Code/client/Services/Generic/PlayerService.cpp": "b61cd38bf172aca16166e710202734c1574ac14cd387776beb7ccd06b9939da7",
     "Code/client/Services/Generic/QuestService.cpp": "2ef95928c6d1ed800b8e5870dd050d483bbce43b987441d68f56a176f1275d00",
     "Code/client/Services/Generic/SyncHealthService.cpp": "58067326446efbf213fdd4fcdc1b0fb9050ecb64f43ee17cccce60ba686a1ac8",
@@ -110,13 +110,13 @@
     "Code/server/Services/InventoryService.cpp": "e2e8f19f811255bc5553ba3c5d01f100b92c8d53d8583a6164c94ee4a78727f4",
     "Code/server/Services/InventoryService.h": "7278fa1370335bbfa793e382db289498514402a2414c2e67195174acebdacfc9",
     "Code/server/Services/ObjectService.cpp": "2441b11e5172d920c3af36b19691bb60f920ef25663cf238ebc75fa5668b177f",
-    "Code/server/Services/PartyRestService.cpp": "439573391b6d7491812afc983cb98e235362194e3b6cc023f1eeff500fb917d8",
-    "Code/server/Services/PartyRestService.h": "31effbc56d85d1f228afcfc2d8409cd45162ebe8e0967b5d38310563821f5638",
+    "Code/server/Services/PartyRestService.cpp": "e613fd7bcea852daf34fab12bbf0d852618d853871997bd0355a6c65f4bd33bb",
+    "Code/server/Services/PartyRestService.h": "21c6a102da855c56f0cc3b1e475c7b4232716971783cd3a063b7c850aff4ff21",
     "Code/server/Services/QuestService.cpp": "de91cdd3a2fc4a35d659046e88fe847d16d6ba11758bfe4dc6614402a02ab863",
     "Code/server/World.cpp": "97bc2ef2b4b695ca3d4235cc80866bf05d4ba887c083ea9ad6a21683f1319859",
     "Code/server/xmake.lua": "8f97277294adeb1043f28dc036000abd7333b0ce9e6947e0afd130c85f51b263",
     "Code/tests/lan_protocol.cpp": "bc729feeb3303e0c188ba843e45542c171b5dd0a38795fe081f877bb4e07a321",
-    "lab/LoreRimLANRest/RECOVERY-STATUS.md": "811a981bdd5f1f02b1e7564f5f0dceb67b06c089a8324a23c03b566ad03bb347",
+    "lab/LoreRimLANRest/RECOVERY-STATUS.md": "a178d32a01a1c6a90b827b693a316688fed47622d483fa5bd298f6b216871575",
     "lab/LoreRimLANRest/prepare_sleep_only.py": "2b360fc487f3ceb4738c75eecd7baa6104bd80c8ed6bb908c72b7b94625cdf3f",
     "lab/LoreRimLANRest/source/LoreRimLANRest.psc": "bd4ded43c0436a8bd3c04cc673b5c732d237e5e93b84b33e9c6b71e1faaaf368",
     "lab/LoreRimLANRest/source/SkyrimTogetherPlayerAliasScript.psc": "ceb9f29513c8c59e90a7ff1fdb1a1d09e8d2dfe70166241e17d99805f53efa18",
@@ -165,6 +165,7 @@
     "terra": "No new client deployment or production server restart",
     "sync_health": "Host visibility, plausible local metrics and F10 modes passed; remote actor/two-client checks and true state agreement pending",
     "death_respawn": "REPEATED_HOST_COMBAT_RESPAWN_AND_CONNECTED_LOAD_DISCONNECT_PASSED",
-    "load_notice": "INSTALLED_PERSISTENT_NOTICE_VISIBILITY_PENDING"
+    "load_notice": "CONNECTED_LOAD_DISCONNECT_AND_PERSISTENT_NOTICE_PASSED",
+    "unpartied_sleep": "SINGLETON_REST_COMPILED_STAGED_NOT_INSTALLED"
   }
 }

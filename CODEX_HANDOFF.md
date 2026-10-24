@@ -1,3 +1,30 @@
+## Load guard accepted; unpartied sleep candidate staged — October 24
+
+User confirmed disconnected + persistent notice visible. Installed eec097dd...
+c5631d3 (native6f4a895), host PID680. Log01:07:11.316 confirms connected load
+closed transport; death mode disabled01:07:11.317. Persistent-notice acceptance
+PASSED by user report (not an agent screenshot). Three earlier host combat
+respawns and the load-disconnect boundary passed. No further death/display test
+is needed for that build. Two-client respawn visibility remains open.
+
+Unpartied sleep source fix now permits a connected unpartied player to initiate
+rest, using a singleton server session. Server rechecks that the player remains
+unpartied; joining/leaving/changing a party invalidates the corresponding session.
+The existing all-connected-players membership gate remains: an outsider blocks
+the canonical clock skip and no relief receipt is granted. Client keeps singleton
+snapshots/receipts alive until server cancellation or disconnect. No Papyrus or
+wire changes; existing command -3 also covers unpartied initiators. Client/server
+builds passed. Candidate in October23 task work/unpartied-rest-candidate is staged,
+NOT installed. Runtime singleton sleep + party regression/cancellation pending.
+No new gameplay unit tests were added per AGENTS.md. No new engine offsets/hooks.
+
+Magicka read-only snapshot still has candidate -100 modifier but no active effect
+matching the audited regeneration-effect records. Rite of Arcana quest script
+only reads MagickaRateMult in inspected references; it is not evidence of the
+modifier's source. Private decompilation is excluded from public source. User
+asked to test offline recovery after casting before deciding whether a repair is
+needed. Do not force/mod actor values from the memory-storage candidate alone.
+
 ## Persistent save-load notice installed — October 24
 
 User saved and quit, then deploy_load_notice.py backed up latest Save21 ESS+SKSE

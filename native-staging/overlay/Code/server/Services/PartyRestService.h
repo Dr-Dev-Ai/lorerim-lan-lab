@@ -18,6 +18,7 @@ private:
         float Hours{};
         uint64_t Deadline{};
         bool Finished{};
+        bool Unpartied{};
         uint8_t Benefit{};
         Vector<uint32_t> Members;
         Map<uint32_t, uint64_t> ReadyAt;

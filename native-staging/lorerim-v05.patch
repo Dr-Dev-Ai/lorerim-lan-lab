@@ -2421,10 +2421,10 @@ index b2140e2..a91a56b 100644
  
 diff --git a/Code/client/Services/Generic/PartyRestService.cpp b/Code/client/Services/Generic/PartyRestService.cpp
 new file mode 100644
-index 0000000..9276939
+index 0000000..b620af5
 --- /dev/null
 +++ b/Code/client/Services/Generic/PartyRestService.cpp
-@@ -0,0 +1,316 @@
+@@ -0,0 +1,312 @@
 +#include <Services/PartyRestService.h>
 +#include <Services/CalendarService.h>
 +#include <World.h>
@@ -2509,7 +2509,8 @@ index 0000000..9276939
 +        m_pendingStatsMenu = true;
 +        return;
 +    }
-+    if (!m_transport.IsConnected() || !m_world.GetPartyService().IsLeader())
++    const auto& party = m_world.GetPartyService();
++    if (!m_transport.IsConnected() || (party.IsInParty() && !party.IsLeader()))
 +        return;
 +    if (acEvent.Command >= 1.f && acEvent.Command <= 24.f)
 +    {
@@ -2544,7 +2545,7 @@ index 0000000..9276939
 +}
 +void PartyRestService::OnNotify(const NotifyPartyRest& acMessage) noexcept
 +{
-+    if (!m_transport.IsConnected() || !m_world.GetPartyService().IsInParty() || !acMessage.Session)
++    if (!m_transport.IsConnected() || !acMessage.Session)
 +        return;
 +    if (acMessage.Action == PartyRestAction::Begin && acMessage.Session > m_lastReceipt)
 +    {
@@ -2580,6 +2581,7 @@ index 0000000..9276939
 +        s_scriptReady.store(false);
 +        m_timedEffects.clear();
 +        spdlog::info("[PartyRest] Cancel session {}", acMessage.Session);
++        Utils::ShowHudMessage(String("Rest canceled: shared time could not advance safely."));
 +    }
 +    else if (acMessage.Action == PartyRestAction::Complete && acMessage.Session == m_session
 +        && acMessage.Session > m_lastReceipt && acMessage.AdvanceTime && std::isfinite(acMessage.Hours) && acMessage.Hours >= 1.f && acMessage.Hours <= 24.f)
@@ -2616,18 +2618,12 @@ index 0000000..9276939
 +        }
 +    }
 +    s_connected.store(m_transport.IsConnected());
-+    s_isLeader.store(m_transport.IsConnected() && m_world.GetPartyService().IsLeader());
-+    if (!m_world.GetPartyService().IsInParty())
-+    {
-+        s_pendingHours.store(0.f);
-+        s_pendingBenefit.store(0);
-+        s_scriptSnapshotRequested.store(false);
-+        s_scriptReady.store(false);
-+        m_session = 0;
-+        m_localRest = m_finishPending = m_cancelPending = false;
-+        m_timedEffects.clear();
-+        return;
-+    }
++    const auto& party = m_world.GetPartyService();
++    // Papyrus command -3 means eligible to initiate rest: party leader or
++    // unpartied. The server still authorizes membership and the world skip.
++    s_isLeader.store(m_transport.IsConnected() && (!party.IsInParty() || party.IsLeader()));
++    // Keep unpartied sessions alive. The server cancels changed membership;
++    // disconnect cleanup also clears pending receipts and local snapshots.
 +    if (!m_session || !m_transport.IsConnected())
 +        return;
 +    const uint64_t cNow = m_world.GetTick();
@@ -5718,10 +5714,10 @@ index 2bd7d15..7636240 100644
  }
 diff --git a/Code/server/Services/PartyRestService.cpp b/Code/server/Services/PartyRestService.cpp
 new file mode 100644
-index 0000000..096616e
+index 0000000..316ab0a
 --- /dev/null
 +++ b/Code/server/Services/PartyRestService.cpp
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,149 @@
 +#include <Services/PartyRestService.h>
 +#include <World.h>
 +#include <GameServer.h>
@@ -5740,6 +5736,8 @@ index 0000000..096616e
 +{
 +    Player* pLeader = m_world.GetPlayerManager().GetById(acSession.Leader);
 +    const auto* pParty = pLeader ? m_world.GetPartyService().GetPlayerParty(pLeader) : nullptr;
++    if (acSession.Unpartied)
++        return pLeader && !pParty && acSession.Members.size() == 1 && acSession.Members[0] == acSession.Leader;
 +    if (!pParty || pParty->LeaderPlayerId != acSession.Leader || pParty->Members.size() != acSession.Members.size())
 +        return false;
 +    for (Player* pPlayer : pParty->Members)
@@ -5770,9 +5768,7 @@ index 0000000..096616e
 +    const auto& request = acEvent.Packet;
 +    Player* pPlayer = acEvent.pPlayer;
 +    const auto* pParty = m_world.GetPartyService().GetPlayerParty(pPlayer);
-+    if (!pParty)
-+        return;
-+    const uint32_t cLeader = pParty->LeaderPlayerId;
++    const uint32_t cLeader = pParty ? pParty->LeaderPlayerId : pPlayer->GetId();
 +    const uint64_t cNow = GameServer::Get()->GetTick();
 +    if (request.Action == PartyRestAction::Begin)
 +    {
@@ -5783,12 +5779,18 @@ index 0000000..096616e
 +        Session session;
 +        session.Id = m_nextSession++;
 +        session.Leader = cLeader;
++        session.Unpartied = !pParty;
 +        session.Hours = request.Hours;
 +        session.Deadline = cNow + 120000;
-+        for (Player* pMember : pParty->Members)
-+            session.Members.push_back(pMember->GetId());
++        if (pParty)
++        {
++            for (Player* pMember : pParty->Members)
++                session.Members.push_back(pMember->GetId());
++        }
++        else
++            session.Members.push_back(cLeader);
 +        m_sessions.emplace(cLeader, session);
-+        spdlog::info("[PartyRest] Begin session {}: {} hours, {} members", session.Id, session.Hours, session.Members.size());
++        spdlog::info("[PartyRest] Begin session {}: {} hours, {} members, {}", session.Id, session.Hours, session.Members.size(), session.Unpartied ? "unpartied" : "party");
 +        Broadcast(session, PartyRestAction::Begin);
 +        return;
 +    }
@@ -5852,7 +5854,8 @@ index 0000000..096616e
 +            continue;
 +        }
 +        // This LAN policy authorizes a world skip only when everybody connected
-+        // belongs to the resting party and has just acknowledged being safe.
++        // belongs to the resting party (or is the sole unpartied sleeper) and
++        // has just acknowledged being safe. Outsiders block an unpartied skip.
 +        bool advance = true;
 +        for (Player* pPlayer : m_world.GetPlayerManager())
 +            advance = advance && std::find(session.Members.begin(), session.Members.end(), pPlayer->GetId()) != session.Members.end();
@@ -5866,10 +5869,10 @@ index 0000000..096616e
 +}
 diff --git a/Code/server/Services/PartyRestService.h b/Code/server/Services/PartyRestService.h
 new file mode 100644
-index 0000000..3156850
+index 0000000..e9df78d
 --- /dev/null
 +++ b/Code/server/Services/PartyRestService.h
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,35 @@
 +#pragma once
 +#include <Events/PacketEvent.h>
 +#include <Structs/PartyRestAction.h>
@@ -5890,6 +5893,7 @@ index 0000000..3156850
 +        float Hours{};
 +        uint64_t Deadline{};
 +        bool Finished{};
++        bool Unpartied{};
 +        uint8_t Benefit{};
 +        Vector<uint32_t> Members;
 +        Map<uint32_t, uint64_t> ReadyAt;
@@ -6125,10 +6129,37 @@ index 0000000..acd7001
 +}
 diff --git a/lab/LoreRimLANRest/RECOVERY-STATUS.md b/lab/LoreRimLANRest/RECOVERY-STATUS.md
 new file mode 100644
-index 0000000..39de7a9
+index 0000000..2d300ea
 --- /dev/null
 +++ b/lab/LoreRimLANRest/RECOVERY-STATUS.md
-@@ -0,0 +1,394 @@
+@@ -0,0 +1,421 @@
++## Load guard accepted; unpartied sleep candidate staged — October 24
++
++User confirmed disconnected + persistent notice visible. Installed eec097dd...
++c5631d3 (native6f4a895), host PID680. Log01:07:11.316 confirms connected load
++closed transport; death mode disabled01:07:11.317. Persistent-notice acceptance
++PASSED by user report (not an agent screenshot). Three earlier host combat
++respawns and the load-disconnect boundary passed. No further death/display test
++is needed for that build. Two-client respawn visibility remains open.
++
++Unpartied sleep source fix now permits a connected unpartied player to initiate
++rest, using a singleton server session. Server rechecks that the player remains
++unpartied; joining/leaving/changing a party invalidates the corresponding session.
++The existing all-connected-players membership gate remains: an outsider blocks
++the canonical clock skip and no relief receipt is granted. Client keeps singleton
++snapshots/receipts alive until server cancellation or disconnect. No Papyrus or
++wire changes; existing command -3 also covers unpartied initiators. Client/server
++builds passed. Candidate in October23 task work/unpartied-rest-candidate is staged,
++NOT installed. Runtime singleton sleep + party regression/cancellation pending.
++No new gameplay unit tests were added per AGENTS.md. No new engine offsets/hooks.
++
++Magicka read-only snapshot still has candidate -100 modifier but no active effect
++matching the audited regeneration-effect records. Rite of Arcana quest script
++only reads MagickaRateMult in inspected references; it is not evidence of the
++modifier's source. Private decompilation is excluded from public source. User
++asked to test offline recovery after casting before deciding whether a repair is
++needed. Do not force/mod actor values from the memory-storage candidate alone.
++
 +## Save-load disconnect passed; persistent notice staged — October 24
 +
 +User created a NEW save and loaded it while connected. Client log00:58:26.083
